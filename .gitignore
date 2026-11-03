@@ -1,0 +1,9 @@
+grok_pack/
+ref/
+*_backup.*
+node_modules/
+_tools/
+screenshots/
+clips/
+art_test/
+v2g_study/
