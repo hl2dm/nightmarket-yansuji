@@ -213,7 +213,12 @@ const A = {
   toggle(s) { if (G.plate.length && !G.pay) G.season[s] = !G.season[s]; },
   cut() { if (G.plate.length && G.cuts < G.cutsNeed && !G.pay) { G.cuts++; G.shake = 0.15; sfx('chop'); } },
   dump() { G.plate.forEach(it => G.stats.waste += ITEMS[it.key].cost); G.plate = []; resetPrep(); },
-  bag() { if (G.counter && G.plate.length && G.cuts >= G.cutsNeed && !G.pay && G.counter.atCounter > 0.6) settle(); },
+  bag() {
+    if (G.pay) return;
+    const why = bagBlock();
+    if (why) { popup(why, 1149, 596, '#ff9f80'); G.bagHint = 1.6; return; }
+    settle();
+  },
   report() { if (G.counter) doReport(); },
   payAccept() { finishPay(G.pay.offer); },
   payMid() {
@@ -387,7 +392,7 @@ function endDay() {
 let buttons = [];
 function btn(id, x, y, w, h, label, onClick, opt = {}) {
   const enabled = opt.enabled !== false;
-  buttons.push({ id, x, y, w, h, enabled, onClick });
+  buttons.push({ id, x, y, w, h, enabled, clickable: enabled || !!opt.clickable, onClick });
   const hover = mouse.x >= x && mouse.x <= x + w && mouse.y >= y && mouse.y <= y + h && enabled;
   const base = opt.color || '#c0392b';
   ctx.save();
@@ -407,7 +412,7 @@ cv.addEventListener('mousemove', e => Object.assign(mouse, toCanvas(e)));
 cv.addEventListener('mousedown', e => {
   const p = toCanvas(e);
   for (let i = buttons.length - 1; i >= 0; i--) { const b = buttons[i];
-    if (b.enabled && p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { if (!/^(item_|lift_|vol)/.test(b.id)) sfx('click'); b.onClick(); return; } }
+    if ((b.enabled || b.clickable) && p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { if (!/^(item_|lift_|vol)/.test(b.id)) sfx('click'); b.onClick(); return; } }
 });
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
@@ -743,13 +748,18 @@ function drawRight() {
     btn('salt', X, 416, 74, 44, '胡椒鹽 Z', () => A.toggle('salt'), { on: G.season.salt, enabled: en, color: '#6b4226', size: 12 });
     btn('spicy', X + 78, 416, 74, 44, '辣+5 X', () => A.toggle('spicy'), { on: G.season.spicy, enabled: en, color: '#6b4226', size: 12 });
     btn('basil', X + 156, 416, 74, 44, '九層塔 C', () => A.toggle('basil'), { on: G.season.basil, enabled: en, color: '#6b4226', size: 12 });
-    btn('cut', X, 468, 136, 46, `✂ 剪 ${G.cuts}/${G.cutsNeed} V`, A.cut, { enabled: en && G.cuts < G.cutsNeed, color: '#2a6f6a', size: 16 });
+    const needCut = en && G.cuts < G.cutsNeed;
+    btn('cut', X, 468, 136, 46, `✂ 剪 ${G.cuts}/${G.cutsNeed} V`, A.cut, { enabled: needCut, color: '#2a6f6a', size: 16 });
+    if (needCut) { const pu = 0.5 + 0.5 * Math.sin(performance.now() / 160) + (G.bagHint > 0 ? 0.5 : 0);
+      ctx.save(); ctx.strokeStyle = `rgba(255,214,102,${Math.min(1, 0.35 + pu * 0.6)})`; ctx.lineWidth = 3 + pu * 2; rr(X - 3, 465, 142, 52, 10); ctx.stroke(); ctx.restore(); }
     btn('dump', X + 142, 468, 88, 46, '倒掉', A.dump, { enabled: en, color: '#6b4226', size: 15 });
     const canBag = c && en && G.cuts >= G.cutsNeed && c.atCounter > 0.6;
     if (c && c.atCounter > 0.5) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 592, 230, 112, 10); ctx.fill(); text('這單要的(✓=盤上有)', X + 8, 606, 13, '#ffd59a');
       const need = c.type === 'regular' && !c.swapped ? G.regularOrder.items : c.order.items; const pk = G.plate.map(q => q.key);
       need.forEach((k, i) => { const j = pk.indexOf(k); if (j >= 0) pk.splice(j, 1); text(`${j >= 0 ? '✓' : '·'} ${ITEMS[k].name}`, X + 10 + (i % 2) * 112, 628 + Math.floor(i / 2) * 20, 14, j >= 0 ? '#8ce99a' : '#d8c8b0'); }); }
-    btn('bag', X, 522, 230, 60, c ? '🛍 裝袋 (Enter)' : '🛍 裝袋(等客人)', A.bag, { enabled: !!canBag, size: 20 });
+    const bagLabel = !c ? '🛍 裝袋(等客人)' : !en ? '🛍 裝袋(盤子空)' : G.cuts < G.cutsNeed ? `🛍 裝袋(先剪 ${G.cuts}/${G.cutsNeed})` : '🛍 裝袋 (Enter)';
+    btn('bag', X, 522, 230, 60, bagLabel, A.bag, { enabled: !!canBag, clickable: en && !!c, size: canBag ? 20 : 17 });
+    if (G.bagHint > 0) G.bagHint -= 1 / 60;
   } else {
     const p = G.pay;
     text(`應收 $${p.price}`, X + 4, 310, 24, '#ffd166');
@@ -766,6 +776,13 @@ function drawRight() {
 
 function drawStation() { drawLeft(); drawTank(); drawRight(); }
 
+function bagBlock() {
+  if (!G.plate.length) return '盤子是空的:先撈起炸好的料';
+  if (!G.counter) return '還沒有客人,等客人來再裝袋';
+  if (G.counter.atCounter <= 0.6) return '客人還沒走到櫃台';
+  if (G.cuts < G.cutsNeed) return `先按發亮的「✂ 剪」${G.cutsNeed - G.cuts} 下`;
+  return '';
+}
 function hint() {
   if (G.phase !== 'open') return '';
   const c = G.counter;
@@ -774,7 +791,7 @@ function hint() {
   if (c.atCounter > 0.6 && shortItems(c).length) return '這單的料不夠了:道歉換單(沒小費、耐心-30%)或請客人離開';
   if (c.sus && c.atCounter > 1) return '這包自備料看起來怪怪的…要幫他炸,還是檢舉?';
   if (G.plate.length && G.cuts >= G.cutsNeed) return '按「裝袋」交給客人';
-  if (G.plate.length) return `調味(胡椒鹽/辣粉/九層塔)後,剪 ${G.cutsNeed} 下`;
+  if (G.plate.length) return `調味(胡椒鹽/辣粉/九層塔)後,按發亮的「✂ 剪」${G.cutsNeed - G.cuts} 下,才能裝袋`;
   const rd = G.fryer.findIndex(it => it && it.d >= ITEMS[it.key].lo && it.d < 100);
   if (rd >= 0) return `${rd + 1} 號網「剛好!」→ 按 ${rd + 1} 或點那個網撈起(空白鍵撈全部熟的)`;
   if (G.fryer.some(Boolean)) return '熟度條的白線走到綠色就「剛好!」;紅色「快焦!」要馬上撈';
