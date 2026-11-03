@@ -48,3 +48,5 @@
 - 備份:game_v31_backup.js、index_v31_backup.html、README_v31_backup.md、../_tools/multinight_v31_backup.mjs。截圖:`node ../_tools/assets_shot.mjs` → screenshots/22_assets_*.png。
 
 - v36:移除「剪」步驟與快剪大剪刀升級,起鍋盤有料、客人到櫃台即可直接裝袋。
+
+- v37(2K 版面):邏輯版面仍為 1280×720 單位,但以 2560×1440(高 DPR 時更高)繪製,imageSmoothingEnabled=false 保持像素銳利;canvas 依視窗等比縮放(16:9,必要時才留黑邊),pointer 事件換算座標支援滑鼠/觸控。街景條加高為 y46–264,客人放大約 2 倍(0.38→0.74,櫃台 0.42→0.8);菜單夾移到右上(顯示 3 張 +N),油槽格子不變仍佔操作區主體。測試:_tools/multinight.mjs 依 canvas 實際位置換算點擊(VW/VH 環境變數可改視窗)。

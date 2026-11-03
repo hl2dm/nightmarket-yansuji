@@ -3,7 +3,15 @@
 'use strict';
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
-const W = 1280, H = 720;
+const W = 1280, H = 720; // 版面座標(邏輯單位);v3.7 實際以 2560×1440(×DPR)繪製
+const RES = 2; // 2K:1 版面單位 = 2 像素
+function fitCanvas() {
+  const vw = window.innerWidth, vh = window.innerHeight; const cw = Math.min(vw, vh * 16 / 9), ch = cw * 9 / 16;
+  cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+  const dpr = window.devicePixelRatio || 1; const bw = Math.max(W * RES, Math.round(cw * dpr)), bh = Math.round(bw * 9 / 16);
+  if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+}
+fitCanvas(); window.addEventListener('resize', fitCanvas);
 const params = new URLSearchParams(location.search);
 const FONT = '"Noto Sans CJK TC","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
 
@@ -77,7 +85,7 @@ function loadSave(peek) {
 // 固定 9 個網位:大網 2×2 佔上兩排(編號 1–3),小網 1×1 在最下排(編號 4–9)。
 // 滿配 3 大 + 6 小 = 12 + 6 = 18 格,正好填滿 6×3。升級只「解鎖」網位,不重排、不改編號。
 const GRID = { x: 266, y: 304, cols: 6, rows: 3, cw: 124, ch: 116 };
-const STRIP = { y0: 140, y1: 264, base: 256 }, COUNTER_X = 660; // 客人走上前的街景條
+const STRIP = { y0: 46, y1: 264, base: 256, x1: 700 }, COUNTER_X = 660; // 客人走上前的街景條
 function basketLayout() {
   const L = [0, 2, 4].map((c, i) => ({ s: 'L', c, r: 0, locked: i === 2 && !has('bigNet'), up: 'bigNet' }));
   for (let c = 0; c < 6; c++) L.push({ s: 'S', c, r: 2, locked: c >= 4 && !has('smallNet'), up: 'smallNet' });
@@ -407,8 +415,8 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
 function lighten(c) { return c === '#c0392b' ? '#e04a3a' : c === '#2a6f6a' ? '#36908a' : c === '#6b4226' ? '#8a5733' : c === '#3b5b92' ? '#4c74b8' : '#888'; }
 const mouse = { x: -1, y: -1 };
 function toCanvas(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; }
-cv.addEventListener('mousemove', e => Object.assign(mouse, toCanvas(e)));
-cv.addEventListener('mousedown', e => {
+cv.addEventListener('pointermove', e => Object.assign(mouse, toCanvas(e)));
+cv.addEventListener('pointerdown', e => { e.preventDefault(); Object.assign(mouse, toCanvas(e));
   const p = toCanvas(e);
   for (let i = buttons.length - 1; i >= 0; i--) { const b = buttons[i];
     if ((b.enabled || b.clickable) && p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { if (!/^(item_|lift_|vol)/.test(b.id)) sfx('click'); b.onClick(); return; } }
@@ -560,20 +568,20 @@ function drawHUD() {
 function drawScene(time) {
   drawBackground(time);
   // 街景條(菜單夾與油槽之間):客人從左邊走來、排隊、到櫃台點單,拿到東西或生氣離開
-  ctx.fillStyle = 'rgba(10,6,4,0.5)'; ctx.fillRect(0, STRIP.y0, W, STRIP.y1 - STRIP.y0);
+  ctx.fillStyle = 'rgba(10,6,4,0.35)'; ctx.fillRect(0, STRIP.y0, STRIP.x1, STRIP.y1 - STRIP.y0);
   const cg = ctx.createLinearGradient(0, STRIP.base - 2, 0, STRIP.y1); cg.addColorStop(0, '#8a5733'); cg.addColorStop(1, '#3a2312');
   ctx.fillStyle = cg; ctx.fillRect(0, STRIP.base - 2, W, STRIP.y1 - STRIP.base + 2);
   ctx.fillStyle = 'rgba(14,8,5,0.96)'; ctx.fillRect(0, STRIP.y1, W, H - STRIP.y1);
-  drawNotebook(8, 148);
+  drawNotebook(8, 152);
   const now = performance.now() / 1000;
-  ctx.save(); ctx.beginPath(); ctx.rect(240, STRIP.y0, W - 240, STRIP.y1 - STRIP.y0); ctx.clip(); // 客人從筆記板右側的巷口走出來,不會蓋到筆記
+  ctx.save(); ctx.beginPath(); ctx.rect(240, STRIP.y0, STRIP.x1 - 240, STRIP.y1 - STRIP.y0); ctx.clip(); // 客人從筆記板右側的巷口走出來,不會蓋到筆記
   ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(240, STRIP.y0, 18, STRIP.base - STRIP.y0);
-  G.walkers.forEach(w => drawPerson(w.c, w.x, 0.38, w.c.angry ? 0 : 1, STRIP.base));
-  const says = () => G.walkers.forEach(w => { if (w.sayT > 0 && w.x > 250) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.font = `bold 14px ${FONT}`; const tw = ctx.measureText(w.c.line).width + 16; rr(w.x - tw / 2, 146, tw, 24, 8); ctx.fill(); text(w.c.line, w.x, 158, 14, w.c.angry ? '#ff8787' : '#b7f5c5', 'center'); } });
-  G.queue.slice().reverse().forEach(c => { if (c.x < -40) return; drawPerson(c, c.x, 0.38, null, STRIP.base);
-    const r = clamp(c.patience / c.max, 0, 1); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(c.x - 24, 146, 48, 7); ctx.fillStyle = r > 0.6 ? '#2a9d55' : r > 0.3 ? '#e98a00' : '#d62828'; ctx.fillRect(c.x - 24, 146, 48 * r, 7); });
+  G.walkers.forEach(w => drawPerson(w.c, w.x, 0.74, w.c.angry ? 0 : 1, STRIP.base));
+  const says = () => G.walkers.forEach(w => { if (w.sayT > 0 && w.x > 250) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.font = `bold 14px ${FONT}`; const tw = ctx.measureText(w.c.line).width + 16; rr(w.x - tw / 2, 84, tw, 24, 8); ctx.fill(); text(w.c.line, w.x, 96, 14, w.c.angry ? '#ff8787' : '#b7f5c5', 'center'); } });
+  G.queue.slice().reverse().forEach(c => { if (c.x < -40) return; drawPerson(c, c.x, 0.74, null, STRIP.base);
+    const r = clamp(c.patience / c.max, 0, 1); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(c.x - 28, 52, 56, 9); ctx.fillStyle = r > 0.6 ? '#2a9d55' : r > 0.3 ? '#e98a00' : '#d62828'; ctx.fillRect(c.x - 28, 52, 56 * r, 9); });
   const c = G.counter;
-  if (c) { drawPerson(c, c.x, 0.42, null, STRIP.base); }
+  if (c) { drawPerson(c, c.x, 0.8, null, STRIP.base); }
   ctx.restore(); says(); // 台詞泡泡畫在裁切外,不會被切掉
   drawStripBubble(c);
   drawRail();
@@ -793,16 +801,17 @@ function hint() {
 
 function drawRail() {
   // 菜單夾:橫向不鏽鋼夾條,每位客人(櫃台+排隊)一張單
-  const y0 = 46;
-  ctx.fillStyle = 'rgba(12,8,5,0.55)'; ctx.fillRect(0, 44, 840, 94);
+  const y0 = 46, RX = 708;
+  ctx.fillStyle = 'rgba(12,8,5,0.88)'; ctx.fillRect(RX, 44, W - RX, 96);
   const mg = ctx.createLinearGradient(0, y0, 0, y0 + 10); mg.addColorStop(0, '#d9dde2'); mg.addColorStop(1, '#7d848c');
-  ctx.fillStyle = mg; rr(8, y0, 824, 10, 4); ctx.fill();
+  ctx.fillStyle = mg; rr(RX + 6, y0, W - RX - 12, 10, 4); ctx.fill();
   const list = (G.counter ? [G.counter] : []).concat(G.queue);
-  if (!list.length) text('(菜單夾是空的 — 客人點單會夾在這裡)', 420, 96, 15, '#9c8a72', 'center', 'normal');
+  if (!list.length) text('(菜單夾是空的 — 客人點單會夾在這裡)', (RX + W) / 2, 96, 15, '#9c8a72', 'center', 'normal');
   const now = performance.now() / 1000;
-  list.slice(0, 5).forEach((c, i) => {
+  ctx.save(); ctx.beginPath(); ctx.rect(RX, 36, W - RX, 106); ctx.clip();
+  list.slice(0, 3).forEach((c, i) => {
     const born = c.railBorn ?? (c.railBorn = now); const k = clamp((now - born) * 3, 0, 1);
-    const x = 14 + i * 164 + (1 - k) * 220, y = y0 + 6, w = 156, h = 84;
+    const x = RX + 12 + i * 164 + (1 - k) * 220, y = y0 + 6, w = 156, h = 84;
     const ratio = clamp(c.patience / c.max, 0, 1), atC = c === G.counter;
     const col = ratio > 0.6 ? '#2a9d55' : ratio > 0.3 ? '#e98a00' : '#d62828';
     ctx.save(); ctx.translate(x + w / 2, y); ctx.rotate((i % 2 ? 1 : -1) * 0.012); ctx.translate(-x - w / 2, -y);
@@ -832,7 +841,8 @@ function drawRail() {
     ctx.fillStyle = '#ddd'; ctx.fillRect(x + 70, y + h - 18, w - 76, 8); ctx.fillStyle = col; ctx.fillRect(x + 70, y + h - 18, (w - 76) * ratio, 8);
     ctx.restore();
   });
-  if (list.length > 5) text(`+${list.length - 5}`, 830, 96, 18, '#ffd166', 'right');
+  ctx.restore();
+  if (list.length > 3) text(`+${list.length - 3}`, W - 8, 130, 18, '#ffd166', 'right');
 }
 
 function infoBar(y) {
@@ -933,6 +943,7 @@ function drawVol() {
 }
 function render(time) {
   buttons = [];
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0); ctx.imageSmoothingEnabled = false;
   ctx.save();
   if (G.shake > 0) ctx.translate(rand(-6, 6) * G.shake * 4, rand(-4, 4) * G.shake * 4);
   if (G.phase === 'title') drawTitle(time);
@@ -941,7 +952,7 @@ function render(time) {
   else if (G.phase === 'shop') drawShop(time);
   else {
     drawScene(time); drawStation(); drawHUD();
-    if (G.t >= G.dayLen) { text('— 收攤時間,服務完排隊的客人 —', 1050, 132, 18, '#ffcf6b', 'center'); }
+    if (G.t >= G.dayLen) { text('— 收攤時間,服務完排隊的客人 —', 470, 100, 18, '#ffcf6b', 'center'); }
   }
   drawVol();
   G.popups.forEach(p => { ctx.globalAlpha = clamp(p.life, 0, 1); text(p.text, p.x, p.y, 24, p.color, 'center'); ctx.globalAlpha = 1; });
