@@ -7,7 +7,7 @@ const HEADLESS = P.get('mute') === '1' || navigator.webdriver === true;
 const VOLS = [0, 0.35, 0.7, 1];
 const DIR = 'assets/sfx/';
 const NAMES = ['fry_loop_a', 'fry_loop_b', 'drop_sizzle', 'crackle_1', 'crackle_2', 'crackle_3', 'basket_clink', 'lift_drip',
-  'scissors_snip', 'burnt_hiss']; // v34: 移除所有叮/鈴/收銀鈴等有音高的提示音(炸歸炸,不要音樂感)
+  'scissors_snip', 'burnt_hiss', 'register']; // v37: 加回機械收銀機(按鍵+抽屜+硬幣,無鈴). v34: 移除所有叮/鈴/收銀鈴等有音高的提示音(炸歸炸,不要音樂感)
 let level = 2; try { const v = localStorage.getItem('yansuji_vol'); if (v !== null) level = +v; } catch (e) {}
 let ac = null, master = null, bus = null, bed = null;
 const buf = {};
@@ -80,7 +80,7 @@ const SFX = {
     play('lift_drip', { v: 0.75, rate: rnd(0.96, 1.04), at: 0.05 });
   },
   order() {}, // v34: 拿掉點單鈴
-  cash() {},  // v34: 拿掉收銀鈴
+  cash() { play('register', { v: 0.6 }); },  // v37: 機械收銀機(無鈴)
   click() { play('basket_clink', { v: 0.12, rate: 1.6 }); },
   chop() { play('scissors_snip', { v: 0.6, rate: rnd(0.95, 1.05) }); },
 };
