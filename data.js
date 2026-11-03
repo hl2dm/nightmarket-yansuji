@@ -9,7 +9,7 @@ const ITEMS = {
   squid:    { size: 'S', name: '魷魚圈', cost: 14, price: 32, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
   byo:      { size: 'S', name: '自備料', cost: 0,  price: 20, ideal: 170, time: 8,  lo: 58, hi: 80, color: '#9c8f6a' },
 };
-// v39 網子:L(雞排)一塊一個大網(2×2);S 小料可混在同一個小網(2×1)一起炸,每網最多 SMALL_CAP 份,各自計熟度
+// v40 網子:L(雞排)一塊一個大網(2×2);S 小料先「備料」放進同一個小網(2×1,最多 SMALL_CAP 份),整網一次下鍋、共用一個計時、整網一次撈
 const SMALL_CAP = 4;
 const MENU = ['chicken', 'tempura', 'riceblood', 'bean', 'mushroom', 'squid'];
 
@@ -35,7 +35,7 @@ const STOCK = {
 const MAX_STOCK = 40;                                // 每種食材庫存上限(份)
 const UPGRADES = [
   { id: 'bigNet',  name: '加大網(第 3 個 2×2)', price: 600, desc: '油槽右上多一個大網:雞排不用排隊' },
-  { id: 'smallNet',name: '加小網(第 3 個混炸網)', price: 300, desc: '油槽右下多一個小網(2×1,可混放 4 份小料)' },
+  { id: 'smallNet',name: '加小網(第 3 個混炸網)', price: 300, desc: '油槽右下多一個小網(2×1,備好 4 份小料整網一起炸)' },
   { id: 'fridge',  name: '保鮮冰箱',         price: 400, desc: '當晚料也能留一晚,隔夜料不扣滿意度' },
   { id: 'filter',  name: '濾油機',           price: 350, desc: '油老化速度 -40%,少換油、少被稽查' },
   { id: 'neon',    name: '霓虹招牌',         price: 500, desc: '來客 +12%,買下時口碑 +5' },
