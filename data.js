@@ -5,11 +5,12 @@ const ITEMS = {
   tempura:  { size: 'S', name: '甜不辣', cost: 7,  price: 18, ideal: 165, time: 8,  lo: 60, hi: 80, color: '#e9c46a' },
   riceblood:{ size: 'S', name: '米血',   cost: 9,  price: 25, ideal: 160, time: 9,  lo: 55, hi: 78, color: '#5a3a3a' },
   bean:     { size: 'S', name: '四季豆', cost: 6,  price: 18, ideal: 185, time: 5,  lo: 52, hi: 72, color: '#6aa84f' },
-  mushroom: { size: 'L', name: '杏鮑菇', cost: 11, price: 28, ideal: 170, time: 10, lo: 60, hi: 85, color: '#d9c7a0' },
-  squid:    { size: 'L', name: '魷魚圈', cost: 14, price: 32, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
+  mushroom: { size: 'S', name: '杏鮑菇', cost: 11, price: 28, ideal: 170, time: 10, lo: 60, hi: 85, color: '#d9c7a0' },
+  squid:    { size: 'S', name: '魷魚圈', cost: 14, price: 32, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
   byo:      { size: 'S', name: '自備料', cost: 0,  price: 20, ideal: 170, time: 8,  lo: 58, hi: 80, color: '#9c8f6a' },
 };
-// 網子尺寸:L = 只能放大網(2×2);S = 放小網(1×1),小網滿了會改放空的大網
+// v39 網子:L(雞排)一塊一個大網(2×2);S 小料可混在同一個小網(2×1)一起炸,每網最多 SMALL_CAP 份,各自計熟度
+const SMALL_CAP = 4;
 const MENU = ['chicken', 'tempura', 'riceblood', 'bean', 'mushroom', 'squid'];
 
 const TEMPS = [
@@ -33,8 +34,8 @@ const STOCK = {
 };
 const MAX_STOCK = 40;                                // 每種食材庫存上限(份)
 const UPGRADES = [
-  { id: 'bigNet',  name: '加大網(第 3 個 2×2)', price: 600, desc: '油槽右上多一個大網:雞排/魷魚/杏鮑菇不用排隊' },
-  { id: 'smallNet',name: '加小網(+2 個 1×1)', price: 300, desc: '油槽右下多兩個小網:甜不辣/米血/四季豆同時炸更多' },
+  { id: 'bigNet',  name: '加大網(第 3 個 2×2)', price: 600, desc: '油槽右上多一個大網:雞排不用排隊' },
+  { id: 'smallNet',name: '加小網(第 3 個混炸網)', price: 300, desc: '油槽右下多一個小網(2×1,可混放 4 份小料)' },
   { id: 'fridge',  name: '保鮮冰箱',         price: 400, desc: '當晚料也能留一晚,隔夜料不扣滿意度' },
   { id: 'filter',  name: '濾油機',           price: 350, desc: '油老化速度 -40%,少換油、少被稽查' },
   { id: 'neon',    name: '霓虹招牌',         price: 500, desc: '來客 +12%,買下時口碑 +5' },

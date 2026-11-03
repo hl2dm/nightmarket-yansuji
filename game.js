@@ -67,7 +67,7 @@ function newNight() {
     stats: { revenue: 0, tips: 0, cost: 0, buy: 0, spoil: 0, waste: 0, fines: 0, rewards: 0, served: 0, lost: 0, happy: 0, angry: 0, oos: 0 },
     log: [], hintT: 0, endReason: '', basket: [], lastServed: [],
   });
-  G.fryer = Array(G.baskets.length).fill(null);
+  G.fryer = G.baskets.map(() => []);
   G.rumor = RUMORS[G.rumorId];
   G.rent = rentFor(G.night);
   buildSchedule();
@@ -88,20 +88,26 @@ const GRID = { x: 266, y: 304, cols: 6, rows: 3, cw: 124, ch: 116 };
 const STRIP = { y0: 46, y1: 264, base: 256, x1: 700 }, COUNTER_X = 660; // 客人走上前的街景條
 function basketLayout() {
   const L = [0, 2, 4].map((c, i) => ({ s: 'L', c, r: 0, locked: i === 2 && !has('bigNet'), up: 'bigNet' }));
-  for (let c = 0; c < 6; c++) L.push({ s: 'S', c, r: 2, locked: c >= 4 && !has('smallNet'), up: 'smallNet' });
+  [0, 2, 4].forEach((c, i) => L.push({ s: 'S', c, r: 2, locked: i === 2 && !has('smallNet'), up: 'smallNet' })); // v39:小網 2×1 混炸
+
   return L;
 }
-function cellRect(b) { const n = b.s === 'L' ? 2 : 1; return { x: GRID.x + b.c * GRID.cw + 4, y: GRID.y + b.r * GRID.ch + 4, w: n * GRID.cw - 8, h: n * GRID.ch - 8 }; }
+function cellRect(b) { const n = b.s === 'L' ? 2 : 1; return { x: GRID.x + b.c * GRID.cw + 4, y: GRID.y + b.r * GRID.ch + 4, w: 2 * GRID.cw - 8, h: n * GRID.ch - 8 }; }
 function slotRect(i) { return cellRect(G.baskets[i]); }
 function freeBasket(k) {
-  const big = ITEMS[k].size === 'L', free = s => G.baskets.findIndex((b, j) => b.s === s && !b.locked && !G.fryer[j]);
-  if (big) return free('L');
-  const i = free('S'); return i >= 0 ? i : free('L');
+  const ok = j => !G.baskets[j].locked && G.baskets[j].s === ITEMS[k].size;
+  if (ITEMS[k].size === 'L') return G.baskets.findIndex((b, j) => ok(j) && !G.fryer[j].length);
+  const cid = G.counter ? G.counter.id : 0, room = j => ok(j) && G.fryer[j].length < SMALL_CAP;
+  let i = G.baskets.findIndex((b, j) => room(j) && G.fryer[j].length && G.fryer[j].every(it => it.cid === cid)); // 同一單的網優先
+  if (i < 0) i = G.baskets.findIndex((b, j) => room(j) && !G.fryer[j].length);
+  if (i < 0) i = G.baskets.findIndex((b, j) => room(j));
+  return i;
 }
+const fried = () => G.fryer.flat();
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 // ---- 庫存 ----
 function stockOf(k) { const v = G.inv[k]; return v ? v.fresh + v.old : 99; }
-function availFor(k) { return stockOf(k) + G.fryer.filter(it => it && it.key === k).length + G.plate.filter(it => it.key === k).length; }
+function availFor(k) { return stockOf(k) + fried().filter(it => it.key === k).length + G.plate.filter(it => it.key === k).length; }
 function shortItems(c) { // 這單有哪些品項庫存+鍋裡+盤上都不夠
   if (!c || c.type === 'byo') return [];
   const need = countBy(c.order.items); return Object.keys(need).filter(k => availFor(k) < need[k]);
@@ -197,28 +203,30 @@ const A = {
     if (G.oilChange > 0) { popup('換油中,等一下', 640, 560, '#ff6b6b'); return; }
     const i = freeBasket(k);
     if (i < 0) { G.fullFlash = 0.6; G.fullSize = ITEMS[k].size;
-      popup(ITEMS[k].size === 'L' ? `大網都在用!${ITEMS[k].name}要大網` : '網子都滿了!先撈起', 640, 420, '#ff6b6b'); return; }
+      popup(ITEMS[k].size === 'L' ? `大網都在用!${ITEMS[k].name}要大網` : '小網都滿了!先撈起一網', 640, 420, '#ff6b6b'); return; }
     let old = false;
     if (G.inv[k]) { const v = G.inv[k]; if (v.old > 0) { v.old--; old = true; } else if (v.fresh > 0) v.fresh--; else { popup(`${ITEMS[k].name} 缺貨!`, 130, 420, '#ff6b6b'); return; } }
-    G.fryer[i] = { key: k, d: 0, cold: 0, age: 0, old, cid: G.counter ? G.counter.id : 0, cue: 0 }; sfx('drop');
+    G.fryer[i].push({ key: k, d: 0, cold: 0, age: 0, old, cid: G.counter ? G.counter.id : 0, cue: 0, slot: G.fryer[i].length }); sfx('drop');
     G.oilUse += has('filter') ? 0.6 : 1; G.temp -= 3;
     const p = slotRect(i); for (let j = 0; j < 10; j++) G.particles.push({ x: p.x + rand(10, p.w - 10), y: p.y + rand(10, p.h - 10), vx: rand(-10, 10), vy: rand(-60, -20), life: rand(0.4, 0.9), c: 'rgba(255,255,255,0.5)' });
   },
   setTemp(k) { G.tempKey = k; },
   lift(i) {
-    const it = G.fryer[i]; if (!it) return;
+    const net = G.fryer[i]; if (!net || !net.length) return; // v39:整網一起撈
+    const good = net.filter(it => it.d < 100), burnt = net.length - good.length;
+    if (G.plate.length + good.length > 8) { popup('盤子滿了', 1150, 420, '#ff6b6b'); return; }
     sfx('lift');
-    if (it.d >= 100) { G.fryer[i] = null; G.stats.waste += ITEMS[it.key].cost; popup('焦掉了!丟掉', 640, 420, '#ff6b6b'); return; }
-    if (G.plate.length >= 8) { popup('盤子滿了', 1150, 420, '#ff6b6b'); return; }
-    G.fryer[i] = null; G.plate.push(it);
+    net.filter(it => it.d >= 100).forEach(it => G.stats.waste += ITEMS[it.key].cost);
+    if (burnt) popup(`焦掉 ${burnt} 份,丟掉`, 640, 420, '#ff6b6b');
+    G.fryer[i] = []; good.forEach(it => G.plate.push(it));
   },
-  liftAll() { G.fryer.forEach((it, i) => { if (it && it.d >= ITEMS[it.key].lo && it.d < 100) A.lift(i); }); }, // 只撈「剛好/快焦」的
+  liftAll() { G.fryer.forEach((net, i) => { if (net.length && netReady(net)) A.lift(i); }); }, // 只撈整網都熟的
   changeOil() {
-    if (G.fryer.some(Boolean) || G.oilChange > 0) return;
+    if (fried().length || G.oilChange > 0) return;
     if (G.cash < OIL_CHANGE_COST) { popup('現金不夠換油', 640, 560, '#ff6b6b'); return; }
     G.cash -= OIL_CHANGE_COST; G.stats.cost += OIL_CHANGE_COST; G.oilUse = 0; G.oilChange = 4; G.temp = 120; addLog('換了一鍋新油(-$150)');
   },
-  toggle(s) { if (G.plate.length && !G.pay) G.season[s] = !G.season[s]; },
+  toggle(s) { if (G.plate.length && !G.pay) { G.season[s] = !G.season[s]; if (G.season[s]) G.shakeJar = { s, t: 0.6 }; } },
   dump() { G.plate.forEach(it => G.stats.waste += ITEMS[it.key].cost); G.plate = []; resetPrep(); },
   bag() {
     if (G.pay) return;
@@ -324,8 +332,8 @@ function leave(c, line, angry) {
 function update(dt) {
   G.popups.forEach(p => { p.life -= dt; p.y -= 30 * dt; }); G.popups = G.popups.filter(p => p.life > 0);
   G.particles.forEach(p => { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; }); G.particles = G.particles.filter(p => p.life > 0);
-  G.shake = Math.max(0, G.shake - dt);
-  sfx('tick', dt / SPEED, G.phase === 'open' ? G.fryer.filter(Boolean).length : 0, G.temp, G.phase === 'open' && G.oilChange <= 0);
+  G.shake = Math.max(0, G.shake - dt); if (G.shakeJar) G.shakeJar.t -= dt;
+  sfx('tick', dt / SPEED, G.phase === 'open' ? fried().length : 0, G.temp, G.phase === 'open' && G.oilChange <= 0);
   if (G.phase !== 'open') return;
   G.t += dt;
   while (G.schedule.length && G.schedule[0].t <= G.t && G.t < G.dayLen) { const e = G.schedule.shift(); if ((e.type === 'normal' || e.type === 'student') && G.rep < 50 && rng() < (50 - G.rep) / 60) continue; spawn(e.type); }
@@ -336,7 +344,7 @@ function update(dt) {
   const rate = G.oilChange > 0 ? 3 : 7;
   G.temp += clamp(target - G.temp, -rate * dt, rate * dt);
   const oldOil = G.oilUse > OIL_LIMIT;
-  G.fryer.forEach((it, i) => { if (!it) return;
+  G.fryer.forEach((net, i) => net.forEach(it => {
     const I = ITEMS[it.key], p = slotRect(i);
     if (it.d < 100) {
       const f = clamp(1 + (G.temp - I.ideal) / 35, 0.15, 2.2) * (oldOil ? 1.15 : 1);
@@ -346,7 +354,7 @@ function update(dt) {
       if (G.temp < I.ideal - 18) it.cold += dt / I.time; // 低溫吸油
     } else if (rng() < dt * 3) G.particles.push({ x: p.x + rand(10, p.w - 10), y: p.y + p.h / 2, vx: rand(-5, 5), vy: -40, life: 1.4, c: 'rgba(60,60,60,0.6)' });
     if (rng() < dt * 4) G.particles.push({ x: p.x + rand(8, p.w - 8), y: p.y + rand(8, p.h - 8), vx: 0, vy: rand(-30, -10), life: rand(0.3, 0.8), c: 'rgba(255,240,200,0.5)' });
-  });
+  }));
   // 客人
   if (!G.counter && G.queue.length && G.t < G.dayLen + G.grace) { G.counter = G.queue.shift(); G.counter.x = G.counter.x || 400; G.counter.atCounter = 0; sfx('order'); }
   G.queue.forEach((c, i) => { c.waited = (c.waited || 0) + dt; c.patience -= dt * 0.4; c.tx = Math.max(300, 580 - i * 68) - Math.max(0, i - 4) * 6; c.x += clamp(c.tx - c.x, -160 * dt, 160 * dt); });
@@ -374,7 +382,7 @@ function update(dt) {
 
 function endDay() {
   G.queue = []; G.counter = null;
-  G.fryer.filter(Boolean).concat(G.plate).forEach(it => G.stats.waste += ITEMS[it.key].cost); G.fryer = G.fryer.map(() => null); G.plate = [];
+  fried().concat(G.plate).forEach(it => G.stats.waste += ITEMS[it.key].cost); G.fryer = G.fryer.map(() => []); G.plate = [];
   if (G.pendingSick) { changeRep(-6); addLog('有客人吃了來路不明的自備料,上網爆料!口碑 -6'); }
   // 隔夜耗損:保存 1 晚的剩料報廢;保存 2 晚的變「隔夜料」,原本的隔夜料報廢。冰箱:全部多留一晚。
   const spoiled = [];
@@ -429,7 +437,7 @@ window.addEventListener('keydown', e => {
   if (G.phase !== 'open') return;
   const m = { a: () => A.drop(MENU[0]), s: () => A.drop(MENU[1]), d: () => A.drop(MENU[2]), f: () => A.drop(MENU[3]), g: () => A.drop(MENU[4]), h: () => A.drop(MENU[5]),
     j: () => { if (G.counter && G.counter.type === 'byo') A.drop('byo'); },
-    '1': () => A.lift(0), '2': () => A.lift(1), '3': () => A.lift(2), '4': () => A.lift(3), '5': () => A.lift(4), '6': () => A.lift(5), '7': () => A.lift(6), '8': () => A.lift(7), '9': () => A.lift(8), o: A.changeOil, q: () => A.setTemp('low'), w: () => A.setTemp('mid'), e: () => A.setTemp('high'), ' ': A.liftAll, z: () => A.toggle('salt'), x: () => A.toggle('spicy'), c: () => A.toggle('basil'), enter: A.bag };
+    '1': () => A.lift(0), '2': () => A.lift(1), '3': () => A.lift(2), '4': () => A.lift(3), '5': () => A.lift(4), '6': () => A.lift(5), o: A.changeOil, q: () => A.setTemp('low'), w: () => A.setTemp('mid'), e: () => A.setTemp('high'), ' ': A.liftAll, z: () => A.toggle('salt'), x: () => A.toggle('spicy'), c: () => A.toggle('basil'), enter: A.bag };
   if (m[k]) { m[k](); e.preventDefault(); }
 });
 
@@ -648,7 +656,7 @@ function drawLeft() {
   text(`油溫 ${Math.round(G.temp)}°C`, 18, ty, 18, G.temp > 182 ? '#ff8f6b' : G.temp < 155 ? '#9ad1ff' : '#ffd166');
   TEMPS.forEach((tp, i) => btn('temp_' + tp.key, 16 + i * 78, ty + 12, 72, 36, `${tp.name} ${'QWE'[i]}`, () => A.setTemp(tp.key), { on: G.tempKey === tp.key, color: '#2a6f6a', size: 14 }));
   text(`油況 ${old ? '老油!' : '新鮮'} ${Math.round(G.oilUse)}/${OIL_LIMIT}${has('filter') ? ' 濾油' : ''}`, 18, ty + 60, 14, old ? '#ff6b6b' : '#b7e4c7');
-  btn('oil', 16, ty + 76, 228, 36, `換油 $${OIL_CHANGE_COST} (O,鍋要空)`, A.changeOil, { enabled: !G.fryer.some(Boolean) && G.oilChange <= 0, color: '#6b4226', size: 14 });
+  btn('oil', 16, ty + 76, 228, 36, `換油 $${OIL_CHANGE_COST} (O,鍋要空)`, A.changeOil, { enabled: !fried().length && G.oilChange <= 0, color: '#6b4226', size: 14 });
 }
 
 // ---------- 中央:俯視油槽 ----------
@@ -657,7 +665,7 @@ function drawTank() {
   const X = 258, Y = 266, TW = 760, TH = 446;
   const tankI = IMG.tank2 || IMG.tankTop;
   if (tankI) { ctx.save(); if (old) ctx.filter = 'brightness(0.7) sepia(0.6)'; ctx.drawImage(tankI, X - 6, Y - 4, TW + 12, TH + 8); ctx.restore();
-    if (G.fryer.some(Boolean)) { ctx.fillStyle = `rgba(255,230,160,${0.05 + 0.03 * Math.sin(now * 9)})`; rr(X + 40, Y + 40, TW - 80, TH - 80, 10); ctx.fill(); } }
+    if (fried().length) { ctx.fillStyle = `rgba(255,230,160,${0.05 + 0.03 * Math.sin(now * 9)})`; rr(X + 40, Y + 40, TW - 80, TH - 80, 10); ctx.fill(); } }
   else { ctx.fillStyle = '#6c7178'; rr(X, Y, TW, TH, 14); ctx.fill(); ctx.fillStyle = old ? '#6a440e' : '#c98a28'; rr(X + 10, Y + 10, TW - 20, TH - 20, 10); ctx.fill(); }
   if (G.fullFlash > 0) { ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; rr(X + 2, Y + 2, TW - 4, TH - 4, 14); ctx.stroke(); }
   // 提示條(油槽上緣)
@@ -668,17 +676,17 @@ function drawTank() {
     ctx.fillStyle = 'rgba(20,12,6,0.55)'; rr(x, y, w, h, 10); ctx.fill();
     ctx.setLineDash([8, 6]); ctx.strokeStyle = 'rgba(255,230,180,0.45)'; ctx.lineWidth = 2; rr(x, y, w, h, 10); ctx.stroke(); ctx.setLineDash([]);
     text('🔒 可升級', x + w / 2, y + h / 2 - 12, b.s === 'L' ? 20 : 14, '#d8c8b0', 'center');
-    text(b.s === 'L' ? `${u.name.split('(')[0]} $${u.price}` : `小網 $${u.price}/2個`, x + w / 2, y + h / 2 + 14, b.s === 'L' ? 15 : 11, '#a89a86', 'center', 'normal'); });
+    text(b.s === 'L' ? `${u.name.split('(')[0]} $${u.price}` : `小網 $${u.price}`, x + w / 2, y + h / 2 + 14, b.s === 'L' ? 15 : 11, '#a89a86', 'center', 'normal'); });
   const cid = G.counter && !G.pay ? G.counter.id : -1;
   for (let i = 0; i < G.fryer.length; i++) if (!G.baskets[i].locked) drawSlot(i, G.fryer[i], now, cid);
   if (G.oilChange > 0) { ctx.fillStyle = 'rgba(0,0,0,0.65)'; rr(400, 440, 476, 80, 12); ctx.fill(); text(`換油中… ${G.oilChange.toFixed(1)}s`, 638, 480, 30, '#fff', 'center'); }
   // 下緣控制條
   ctx.fillStyle = 'rgba(10,6,4,0.8)'; rr(266, 658, 744, 48, 10); ctx.fill();
-  text('大網 2×2 放雞排/魷魚/杏鮑菇 · 小網 1×1 放小料(小網滿才用大網)', 280, 671, 13, '#d8c8b0', 'left', 'normal');
-  const cnt = s => G.baskets.filter((b, j) => b.s === s && !b.locked && !G.fryer[j]).length;
-  text('大網 1–3 · 小網 4–9 撈該網', 280, 693, 14, '#ffd59a', 'left', 'normal');
+  text(`大網 2×2 一塊雞排 · 小網可混放 ${SMALL_CAP} 份小料一起炸(整網撈)`, 280, 671, 13, '#d8c8b0', 'left', 'normal');
+  const cnt = s => G.baskets.filter((b, j) => b.s === s && !b.locked && !G.fryer[j].length).length;
+  text('大網 1–3 · 小網 4–6 撈整網', 280, 693, 14, '#ffd59a', 'left', 'normal');
   text(`空大網 ${cnt('L')} · 空小網 ${cnt('S')}`, 500, 693, 15, G.fullFlash > 0 ? '#ff6b6b' : '#b7e4c7', 'left');
-  btn('liftAll', 810, 662, 194, 40, '撈熟的(空白鍵)', A.liftAll, { enabled: G.fryer.some(it => it && it.d >= ITEMS[it.key].lo && it.d < 100), size: 16 });
+  btn('liftAll', 810, 662, 194, 40, '撈熟的(空白鍵)', A.liftAll, { enabled: G.fryer.some(n => n.length && netReady(n)), size: 16 });
 }
 
 function slotState(it) {
@@ -688,56 +696,74 @@ function slotState(it) {
   if (it.d <= I.hi) return { lab: '剛好!', col: '#21b36b', fg: '#eafff2', ready: true };
   { const t = clamp((it.d - I.hi) / Math.max(1, 100 - I.hi), 0, 1); return { lab: '快焦!', col: `rgb(${Math.round(240 - 20 * t)},${Math.round(140 - 100 * t)},${Math.round(40)})`, fg: '#ffe0d6', warn: true }; }
 }
-function drawSlot(i, it, now, cid) {
-  const b = G.baskets[i], big = b.s === 'L', { x, y, w, h } = slotRect(i);
-  ctx.fillStyle = it ? 'rgba(20,10,4,0.35)' : 'rgba(20,10,4,0.18)'; rr(x, y, w, h, 10); ctx.fill();
+function netReady(net) { const g = net.filter(it => it.d < 100); return net.some(it => it.d >= 100) || (g.length && g.every(it => it.d >= ITEMS[it.key].lo)); }
+function drawSlot(i, net, now, cid) {
+  const b = G.baskets[i], big = b.s === 'L', { x, y, w, h } = slotRect(i), on = net.length > 0;
+  ctx.fillStyle = on ? 'rgba(20,10,4,0.35)' : 'rgba(20,10,4,0.18)'; rr(x, y, w, h, 10); ctx.fill();
   const netI = (big ? IMG.bigNet : IMG.smallNet) || IMG.basketTop;
-  if (netI) { ctx.save(); ctx.globalAlpha = it ? 0.8 : 0.95; ctx.drawImage(netI, x, y, w, h); ctx.restore(); }
+  if (netI) { ctx.save(); ctx.globalAlpha = on ? 0.8 : 0.95; ctx.drawImage(netI, x, y, w, h); ctx.restore(); }
   else { ctx.strokeStyle = '#c9ced4'; ctx.lineWidth = 3; rr(x + 3, y + 3, w - 6, h - 6, 8); ctx.stroke(); }
-  // 鍵位徽章 + 網子尺寸
-  const bs = big ? 30 : 24; ctx.fillStyle = '#ffd166'; rr(x + 6, y + 6, bs, bs, 6); ctx.fill(); text(String(i + 1), x + 6 + bs / 2, y + 6 + bs / 2, big ? 20 : 16, '#2b1a0e', 'center');
-  ctx.fillStyle = big ? 'rgba(224,122,31,0.9)' : 'rgba(59,127,184,0.9)'; rr(x + bs + 10, y + 8, big ? 46 : 30, big ? 22 : 18, 5); ctx.fill();
-  text(big ? '大網' : '小', x + bs + 10 + (big ? 23 : 15), y + 8 + (big ? 11 : 9), big ? 14 : 11, '#fff', 'center');
-  if (!it) {
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; rr(x + w / 2 - (big ? 70 : 34), y + h / 2 - 16, big ? 140 : 68, 32, 8); ctx.fill();
-    text(big ? '空 · 放大料' : '空', x + w / 2, y + h / 2, big ? 17 : 15, '#e8d9c0', 'center');
-    if (G.fullFlash > 0 && G.fullSize === 'L' && !big) { ctx.fillStyle = 'rgba(59,127,184,0.25)'; rr(x, y, w, h, 10); ctx.fill(); }
+  const bs = big ? 30 : 22; ctx.fillStyle = '#ffd166'; rr(x + 6, y + 6, bs, bs, 6); ctx.fill(); text(String(i + 1), x + 6 + bs / 2, y + 6 + bs / 2, big ? 20 : 15, '#2b1a0e', 'center');
+  ctx.fillStyle = big ? 'rgba(224,122,31,0.9)' : 'rgba(59,127,184,0.9)'; rr(x + bs + 10, y + 7, big ? 46 : 74, 20, 5); ctx.fill();
+  text(big ? '大網' : `小網 ${net.length}/${SMALL_CAP}`, x + bs + 10 + (big ? 23 : 37), y + 17, 12, '#fff', 'center');
+  if (!on) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; rr(x + w / 2 - 70, y + h / 2 - 14, 140, 28, 8); ctx.fill();
+    text(big ? '空 · 放雞排' : '空 · 小料混炸', x + w / 2, y + h / 2, 15, '#e8d9c0', 'center');
     return;
   }
   buttons.push({ id: 'lift_' + i, x, y, w, h, enabled: true, onClick: () => A.lift(i) });
-  const I = ITEMS[it.key], st = slotState(it), k = clamp(it.d / 100, 0, 1);
-  const blink = st.ready ? (Math.sin(now * Math.PI * 4) > 0) : st.warn ? (Math.sin(now * Math.PI * 8) > 0) : true;
-  if (big && ITEMS[it.key].size === 'S') { ctx.fillStyle = 'rgba(224,122,31,0.85)'; rr(x + 6, y + 44, 120, 22, 5); ctx.fill(); text('小料佔用大網', x + 66, y + 55, 12, '#fff', 'center'); }
-  // 這單 / 隔夜 標籤(右上)
-  if (it.cid === cid) { ctx.fillStyle = '#4cc9f0'; rr(x + w - (big ? 58 : 40), y + 8, big ? 50 : 34, 20, 5); ctx.fill(); text('這單', x + w - (big ? 33 : 23), y + 18, big ? 13 : 11, '#06283d', 'center'); }
-  if (it.old && !has('fridge')) text('隔夜', x + w - 10, y + (big ? 42 : 34), 12, '#ffb703', 'right');
-  // 食材(俯視,依熟度變色)
-  const fim = IMG['f_' + (IMG_ALIAS[it.key] || it.key)], s = big ? 118 : 44, cx = x + w / 2, cy = y + (big ? 100 : 50);
-  const rawI = IMG['raw_' + it.key], frI = IMG['fr_' + it.key];
-  const fit = (im, a, flt) => { if (!im) return; const sc = s / Math.max(im.width, im.height); ctx.save(); ctx.globalAlpha = a; if (flt) ctx.filter = flt; ctx.drawImage(im, cx - im.width * sc / 2, cy - im.height * sc / 2, im.width * sc, im.height * sc); ctx.restore(); };
-  if (rawI && frI) { // 生→熟:生料圖淡出、炸好圖淡入;過熟變暗;焦了換焦黑圖
-    if (it.d >= 100) fit(IMG.burnt || frI, 1, IMG.burnt ? '' : 'brightness(0.2)');
-    else { const m = clamp(it.d / I.lo, 0, 1); fit(rawI, 1); if (m > 0) fit(frI, m, it.d > I.hi ? `brightness(${1 - 0.5 * (it.d - I.hi) / (100 - I.hi)}) sepia(0.3)` : ''); }
-  } else if (fim) { ctx.save(); ctx.filter = it.d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${1.35 - 0.7 * k}) saturate(${0.6 + 0.6 * k})`; if (it.key === 'byo') ctx.filter += ' hue-rotate(60deg)'; ctx.drawImage(fim, cx - s / 2, cy - s / 2, s, s); ctx.restore(); }
-  else { ctx.fillStyle = I.color; ctx.beginPath(); ctx.arc(cx, cy, s / 3, 0, 7); ctx.fill(); }
-  if (it.d >= 100) { ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx - s / 2.4, cy - s / 2.4); ctx.lineTo(cx + s / 2.4, cy + s / 2.4); ctx.moveTo(cx + s / 2.4, cy - s / 2.4); ctx.lineTo(cx - s / 2.4, cy + s / 2.4); ctx.stroke(); }
-  // 狀態外框
-  ctx.strokeStyle = st.col; ctx.lineWidth = st.ready || st.warn ? (blink ? 7 : 3) : 3; rr(x, y, w, h, 10); ctx.stroke();
-  // 狀態膠囊 + 倒數
-  let sub = st.lab;
-  if (!st.ready && !st.warn && it.d < 100) { const f = clamp(1 + (G.temp - I.ideal) / 35, 0.15, 2.2) * (G.oilUse > OIL_LIMIT ? 1.15 : 1); const sec = (I.lo - it.d) / (100 / I.time * f * 0.95); sub = big ? `${I.name} ${st.lab} ${sec.toFixed(1)}s` : `${st.lab} ${sec.toFixed(0)}s`; }
-  else if (st.burnt) sub = big ? `焦了!按 ${i + 1} 丟掉` : '焦!丟';
-  else if (big) sub = `${I.name} ${st.lab}`;
-  const ph = big ? 34 : 24, py = y + h - (big ? 64 : 44);
-  ctx.fillStyle = st.ready || st.warn || st.burnt ? st.col : 'rgba(20,30,45,0.85)'; rr(x + 6, py, w - 12, ph, 7); ctx.fill();
-  text(sub, x + w / 2, py + ph / 2, big ? (st.ready || st.warn ? 20 : 16) : (st.ready || st.warn ? 14 : 12), '#fff', 'center');
-  // 橫向熟度條:藍=未熟 綠=剛好 紅=快焦,白線=目前
-  const bx = x + 8, by = y + h - (big ? 24 : 16), bw = w - 16, bh = big ? 14 : 9;
-  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(bx, by, bw, bh);
-  ctx.fillStyle = 'rgba(79,127,168,0.8)'; ctx.fillRect(bx, by, bw * I.lo / 100, bh);
-  ctx.fillStyle = 'rgba(33,179,107,0.95)'; ctx.fillRect(bx + bw * I.lo / 100, by, bw * (I.hi - I.lo) / 100, bh);
-  ctx.fillStyle = 'rgba(226,64,43,0.85)'; ctx.fillRect(bx + bw * I.hi / 100, by, bw * (1 - I.hi / 100), bh);
-  ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * k - 2, by - 4, 4, bh + 8);
+  if (net.every(it => it.cid === cid)) { ctx.fillStyle = '#4cc9f0'; rr(x + w - 50, y + 7, 42, 20, 5); ctx.fill(); text('這單', x + w - 29, y + 17, 12, '#06283d', 'center'); }
+  const ready = netReady(net), worst = net.reduce((m, it) => { const st = slotState(it); return st.burnt ? 3 : st.warn ? Math.max(m, 2) : m; }, 0);
+  const blink = Math.sin(now * Math.PI * (worst ? 8 : 4)) > 0;
+  const n = big ? 1 : SMALL_CAP, cw = (w - 12) / n;
+  net.forEach((it, j) => {
+    const I = ITEMS[it.key], st = slotState(it), k = clamp(it.d / 100, 0, 1);
+    const s = big ? 118 : 46, cx = x + 6 + cw * j + cw / 2, cy = y + (big ? 100 : 52);
+    const rawI = IMG['raw_' + it.key], frI = IMG['fr_' + it.key], fim = IMG['f_' + (IMG_ALIAS[it.key] || it.key)];
+    const fit = (im, a, flt) => { if (!im) return; const sc = s / Math.max(im.width, im.height); ctx.save(); ctx.globalAlpha = a; if (flt) ctx.filter = flt; ctx.drawImage(im, cx - im.width * sc / 2, cy - im.height * sc / 2, im.width * sc, im.height * sc); ctx.restore(); };
+    if (rawI && frI) { if (it.d >= 100) fit(IMG.burnt || frI, 1, IMG.burnt ? '' : 'brightness(0.2)');
+      else { const m = clamp(it.d / I.lo, 0, 1); fit(rawI, 1); if (m > 0) fit(frI, m, it.d > I.hi ? `brightness(${1 - 0.5 * (it.d - I.hi) / (100 - I.hi)}) sepia(0.3)` : ''); } }
+    else if (fim) { ctx.save(); ctx.filter = it.d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${1.35 - 0.7 * k}) saturate(${0.6 + 0.6 * k})`; if (it.key === 'byo') ctx.filter += ' hue-rotate(60deg)'; ctx.drawImage(fim, cx - s / 2, cy - s / 2, s, s); ctx.restore(); }
+    else { ctx.fillStyle = I.color; ctx.beginPath(); ctx.arc(cx, cy, s / 3, 0, 7); ctx.fill(); }
+    if (it.old && !has('fridge')) text('隔夜', cx + cw / 2 - 4, cy - s / 2 + 2, 10, '#ffb703', 'right');
+    let sub = st.lab;
+    if (!st.ready && !st.warn && it.d < 100) { const f = clamp(1 + (G.temp - I.ideal) / 35, 0.15, 2.2) * (G.oilUse > OIL_LIMIT ? 1.15 : 1); sub = `${(big ? I.name + ' ' : '') + st.lab} ${((I.lo - it.d) / (100 / I.time * f * 0.95)).toFixed(big ? 1 : 0)}s`; }
+    else if (big) sub = `${I.name} ${st.lab}`;
+    const ph = big ? 30 : 18, py = y + h - (big ? 58 : 38), px = x + 6 + cw * j + 2, pw = cw - 4;
+    ctx.fillStyle = st.ready || st.warn || st.burnt ? st.col : 'rgba(20,30,45,0.85)'; rr(px, py, pw, ph, 5); ctx.fill();
+    text(big ? sub : (I.name.length > 2 ? I.name.slice(0, 2) : I.name) + ' ' + sub, px + pw / 2, py + ph / 2, big ? 18 : 10, '#fff', 'center');
+    const by = y + h - (big ? 22 : 15), bh = big ? 12 : 7;
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(px, by, pw, bh);
+    ctx.fillStyle = 'rgba(79,127,168,0.8)'; ctx.fillRect(px, by, pw * I.lo / 100, bh);
+    ctx.fillStyle = 'rgba(33,179,107,0.95)'; ctx.fillRect(px + pw * I.lo / 100, by, pw * (I.hi - I.lo) / 100, bh);
+    ctx.fillStyle = 'rgba(226,64,43,0.85)'; ctx.fillRect(px + pw * I.hi / 100, by, pw * (1 - I.hi / 100), bh);
+    ctx.fillStyle = '#fff'; ctx.fillRect(px + pw * k - 1.5, by - 3, 3, bh + 6);
+  });
+  const col = worst === 3 ? '#7a1010' : worst === 2 ? '#e8742a' : ready ? '#21b36b' : '#4f7fa8';
+  ctx.strokeStyle = col; ctx.lineWidth = ready || worst ? (blink ? 7 : 3) : 3; rr(x, y, w, h, 10); ctx.stroke();
+  if (ready && !big) { ctx.fillStyle = col; rr(x + w / 2 - 48, y + 7, 96, 20, 5); ctx.fill(); text(worst === 3 ? '有焦!整網撈' : '整網熟了!', x + w / 2, y + 17, 12, '#fff', 'center'); }
+}
+// v39:調味罐(canvas 畫的撒粉罐,點一下會傾斜撒粉)
+function shaker(id, x, y, label, body, cap, on, en) {
+  buttons.push({ id, x, y, w: 74, h: 52, enabled: en, clickable: en, onClick: () => A.toggle(id) });
+  const sj = G.shakeJar && G.shakeJar.s === id && G.shakeJar.t > 0 ? G.shakeJar : null;
+  ctx.save(); ctx.fillStyle = on ? 'rgba(244,162,97,0.35)' : 'rgba(0,0,0,0.3)'; rr(x, y, 74, 52, 8); ctx.fill();
+  if (on) { ctx.strokeStyle = '#ffe8a3'; ctx.lineWidth = 2.5; rr(x, y, 74, 52, 8); ctx.stroke(); }
+  const cx = x + 20, cy = y + 28; ctx.translate(cx, cy);
+  if (sj) ctx.rotate(-0.9 * Math.sin(sj.t / 0.6 * Math.PI) - 0.15 * Math.sin(sj.t * 60));
+  if (!en) ctx.globalAlpha = 0.45;
+  ctx.fillStyle = cap; rr(-10, -20, 20, 9, 3); ctx.fill(); // 蓋
+  ctx.fillStyle = '#d9dde2'; rr(-11, -12, 22, 4, 1); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(i * 5, -17, 1.4, 0, 7); ctx.fill(); }
+  const g = ctx.createLinearGradient(-11, 0, 11, 0); g.addColorStop(0, 'rgba(255,255,255,0.35)'); g.addColorStop(0.3, 'rgba(255,255,255,0.08)'); g.addColorStop(1, 'rgba(0,0,0,0.25)');
+  ctx.fillStyle = 'rgba(230,240,245,0.35)'; rr(-11, -8, 22, 28, 4); ctx.fill(); // 玻璃
+  ctx.fillStyle = body; rr(-10, -1, 20, 20, 3); ctx.fill(); // 粉
+  ctx.fillStyle = g; rr(-11, -8, 22, 28, 4); ctx.fill();
+  ctx.fillStyle = '#fff8e7'; ctx.fillRect(-10, 4, 20, 8); ctx.fillStyle = cap; ctx.font = `bold 7px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label.slice(0, id === 'spicy' ? 2 : 3), 0, 8.5);
+  ctx.restore();
+  text(label.split(' ')[0], x + 54, y + 20, 11, en ? '#fff8e7' : '#9a8f86', 'center');
+  text(label.split(' ')[1] || '', x + 54, y + 38, 11, '#ffd59a', 'center', 'normal');
+  if (sj) for (let i = 0; i < 2; i++) G.particles.push({ x: cx - 14 + rand(-4, 4), y: cy - 18, vx: rand(-20, 10), vy: rand(30, 70), life: 0.4, c: body });
 }
 
 // ---------- 右欄:櫃台客人、起鍋盤、收銀 ----------
@@ -752,9 +778,9 @@ function drawRight() {
     G.plate.forEach((it, i) => { const bx = X + 4 + (i % 2) * 113, by = 300 + Math.floor(i / 2) * 27; chip(it.key, bx, by, it.d, 108, 24);
       const [lab, col] = doneLabel(it); ctx.fillStyle = col; rr(bx + 74, by + 13, 34, 12, 4); ctx.fill(); text(lab, bx + 91, by + 19, 9, '#fff', 'center'); });
     const en = G.plate.length > 0;
-    btn('salt', X, 416, 74, 44, '胡椒鹽 Z', () => A.toggle('salt'), { on: G.season.salt, enabled: en, color: '#6b4226', size: 12 });
-    btn('spicy', X + 78, 416, 74, 44, '辣+5 X', () => A.toggle('spicy'), { on: G.season.spicy, enabled: en, color: '#6b4226', size: 12 });
-    btn('basil', X + 156, 416, 74, 44, '九層塔 C', () => A.toggle('basil'), { on: G.season.basil, enabled: en, color: '#6b4226', size: 12 });
+    shaker('salt', X, 410, '胡椒鹽 Z', '#e9dfc8', '#6b5a44', G.season.salt, en);
+    shaker('spicy', X + 78, 410, '辣粉+5 X', '#c8321f', '#7a1a10', G.season.spicy, en);
+    shaker('basil', X + 156, 410, '九層塔 C', '#3f8f3a', '#1f4f1c', G.season.basil, en);
     btn('dump', X, 468, 230, 46, '倒掉', A.dump, { enabled: en, color: '#6b4226', size: 15 });
     const canBag = c && en && c.atCounter > 0.6;
     if (c && c.atCounter > 0.5) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 592, 230, 112, 10); ctx.fill(); text('這單要的(✓=盤上有)', X + 8, 606, 13, '#ffd59a');
@@ -792,11 +818,11 @@ function hint() {
   if (G.pay) return G.pay.offer < G.pay.price ? '客人在殺價:成交、讓價或堅持原價?' : '收錢!';
   if (c.atCounter > 0.6 && shortItems(c).length) return '這單的料不夠了:道歉換單(沒小費、耐心-30%)或請客人離開';
   if (c.sus && c.atCounter > 1) return '這包自備料看起來怪怪的…要幫他炸,還是檢舉?';
-  if (G.plate.length) return '可調味(胡椒鹽/辣粉/九層塔),再按「裝袋」交給客人';
-  const rd = G.fryer.findIndex(it => it && it.d >= ITEMS[it.key].lo && it.d < 100);
-  if (rd >= 0) return `${rd + 1} 號網「剛好!」→ 按 ${rd + 1} 或點那個網撈起(空白鍵撈全部熟的)`;
-  if (G.fryer.some(Boolean)) return '熟度條的白線走到綠色就「剛好!」;紅色「快焦!」要馬上撈';
-  return '照客人點的,點左邊食材(或按 A–H)下鍋:大料進大網、小料進小網';
+  if (G.plate.length) return '點罐子灑胡椒鹽/辣粉、加九層塔,再按「裝袋」交給客人';
+  const rd = G.fryer.findIndex(n => n.length && netReady(n));
+  if (rd >= 0) return `${rd + 1} 號網整網熟了 → 按 ${rd + 1} 或點網子,整網撈到盤上(空白鍵撈全部熟網)`;
+  if (fried().length) return '同一網的小料一起撈:炸得久的(米血)先下,快熟的(四季豆)晚點下';
+  return '點左邊食材(或按 A–H)下鍋:雞排一塊一大網;小料同一單會混進同一個小網一起炸';
 }
 
 function drawRail() {
