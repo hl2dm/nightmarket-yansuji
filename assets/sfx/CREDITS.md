@@ -15,7 +15,7 @@ All source recordings are from Freesound.org and released under **Creative Commo
 | order_bell | new order bell | https://freesound.org/people/tonmayster/sounds/685111/ "desk bell center" (tonmayster) | CC0 |
 | warn_ding | gentle near-burnt warning | https://freesound.org/people/5ro4/sounds/611113/ "bell ding 1" (5ro4) | CC0 |
 | cash_register | payment | https://freesound.org/people/clubmydia+/sounds/584168/ "old cash register open and close with a bing" (clubmydia+) | CC0 |
-| register | payment (v37, mechanical only) | https://freesound.org/people/clubmydia+/sounds/584168/ trimmed: key clacks 0.02–0.36s + drawer/coins 1.68–2.50s, bells removed; HP120Hz, ~-16 LUFS, fades | CC0 |
+| register | payment (v38: keys + one bell ding boosted ~+7 dB + drawer) | https://freesound.org/people/clubmydia+/sounds/584168/ trimmed: keys 0.02–0.36s, bell 0.97–1.62s (HP2.2kHz, x2.4), drawer 1.68–2.32s; HP120Hz, limiter, peak -1.5 dBFS, 1.26s | CC0 |
 | scissors_snip | scissors cut | https://freesound.org/people/falcospizaetus/sounds/489993/ "ScissorsPaper09" (falcospizaetus) | CC0 |
 
 

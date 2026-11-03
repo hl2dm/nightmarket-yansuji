@@ -80,7 +80,7 @@ const SFX = {
     play('lift_drip', { v: 0.75, rate: rnd(0.96, 1.04), at: 0.05 });
   },
   order() {}, // v34: 拿掉點單鈴
-  cash() { play('register', { v: 0.6 }); },  // v37: 機械收銀機(無鈴)
+  cash() { play('register', { v: 0.8 }); },  // v38: 收銀機+清楚的叮(使用者要求,唯一有音高的音)
   click() { play('basket_clink', { v: 0.12, rate: 1.6 }); },
   chop() { play('scissors_snip', { v: 0.6, rate: rnd(0.95, 1.05) }); },
 };
