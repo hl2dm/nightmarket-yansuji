@@ -7,7 +7,7 @@ const HEADLESS = P.get('mute') === '1' || navigator.webdriver === true;
 const VOLS = [0, 0.35, 0.7, 1];
 const DIR = 'assets/sfx/';
 const NAMES = ['fry_loop_a', 'fry_loop_b', 'drop_sizzle', 'crackle_1', 'crackle_2', 'crackle_3', 'basket_clink', 'lift_drip',
-  'done_ding', 'order_bell', 'warn_ding', 'cash_register', 'scissors_snip', 'burnt_hiss'];
+  'scissors_snip', 'burnt_hiss']; // v34: 移除所有叮/鈴/收銀鈴等有音高的提示音(炸歸炸,不要音樂感)
 let level = 2; try { const v = localStorage.getItem('yansuji_vol'); if (v !== null) level = +v; } catch (e) {}
 let ac = null, master = null, bus = null, bed = null;
 const buf = {};
@@ -71,16 +71,16 @@ const SFX = {
     play('drop_sizzle', { v: rnd(0.8, 1), rate: rnd(0.95, 1.05) });
     play('basket_clink', { v: 0.35, rate: rnd(0.95, 1.05) });
   },
-  done() { play('done_ding', { v: 0.7 }); },
-  warn() { if (warnT > 0) return; warnT = 2.5; play('warn_ding', { v: 0.45, rate: 0.85 }); }, // 溫和提醒,不連發
-  burnt() { play('burnt_hiss', { v: 0.6, rate: 0.9 }); play('warn_ding', { v: 0.35, rate: 0.7, at: 0.1 }); },
+  done() {}, // v34: 熟度只靠畫面,不出聲
+  warn() {},
+  burnt() { play('burnt_hiss', { v: 0.6, rate: 0.9 }); },
   lift() { // 撈起:籃子碰撞 + 滴油嘶聲
     if (!ac) return;
     play('basket_clink', { v: 0.6, rate: rnd(0.95, 1.05) });
     play('lift_drip', { v: 0.75, rate: rnd(0.96, 1.04), at: 0.05 });
   },
-  order() { play('order_bell', { v: 0.6 }); },
-  cash() { play('cash_register', { v: 0.6 }); },
+  order() {}, // v34: 拿掉點單鈴
+  cash() {},  // v34: 拿掉收銀鈴
   click() { play('basket_clink', { v: 0.12, rate: 1.6 }); },
   chop() { play('scissors_snip', { v: 0.6, rate: rnd(0.95, 1.05) }); },
 };
