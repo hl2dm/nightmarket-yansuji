@@ -39,7 +39,6 @@ const UPGRADES = [
   { id: 'filter',  name: '濾油機',           price: 350, desc: '油老化速度 -40%,少換油、少被稽查' },
   { id: 'neon',    name: '霓虹招牌',         price: 500, desc: '來客 +12%,買下時口碑 +5' },
   { id: 'fan',     name: '電風扇+板凳',      price: 300, desc: '客人耐心 +20%' },
-  { id: 'scissors',name: '快剪大剪刀',       price: 250, desc: '剪裝只要 2 刀' },
   { id: 'bulk',    name: '批發會員卡',       price: 450, desc: '進貨價 -10%' },
 ];
 const MAX_UPGRADES_PER_NIGHT = 2;

@@ -29,7 +29,7 @@ loadImg('burnt', 'assets/food_burnt.png'); loadImg('bigNet', 'assets/basket_big.
 loadImg('tank2', 'assets/fryer_tank.png'); loadImg('uiCash', 'assets/ui_cash.png'); loadImg('uiRep', 'assets/ui_rep.png');
 loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bowl_chili.png'); loadImg('bowl_basil', 'assets/food_basil_fried.png'); loadImg('scissorsP', 'assets/scissors.png'); loadImg('bagP', 'assets/food_bag.png'); loadImg('cashTray', 'assets/cash_tray.png');
 ['stall_front','bg_mid','shop_upgrade','night_summary'].forEach(k => loadImg('sc_' + k, `assets/scene_${k}.jpg`));
-['bigNet','smallNet','fridge','filter','neon','fan','scissors','bulk'].forEach(k => loadImg('upg_' + k, `assets/upg_${k}.png`));
+['bigNet','smallNet','fridge','filter','neon','fan','bulk'].forEach(k => loadImg('upg_' + k, `assets/upg_${k}.png`));
 const sfx = (n, ...a) => { const S = window.SFX; if (S && S[n]) S[n](...a); };
 const foodImg = (k, fried = true) => IMG[(fried ? 'fr_' : 'raw_') + k] || IMG['f_' + (IMG_ALIAS[k] || k)];
 const IMG_ALIAS = { byo: 'mushroom' };
@@ -53,7 +53,7 @@ function newNight() {
     t: 0, dayLen: 180, grace: 45, repStart: G.rep, cashStart: G.cash, debtStart: G.debt, endBanner: false, pendingSick: false,
     queue: [], counter: null, walkers: [], baskets: basketLayout(), fryer: null, lastLine: null, fullFlash: 0, plate: [],
     temp: 150, tempKey: 'mid', oilUse: 0, oilChange: 0,
-    season: { salt: false, spicy: false, basil: false }, cuts: 0, cutsNeed: has('scissors') ? 2 : 3,
+    season: { salt: false, spicy: false, basil: false }, cuts: 0, cutsNeed: 0, // v36: 剪的步驟已移除
     pay: null, schedule: [], nextId: 1, boughtTonight: 0, buyLog: {},
     rumorId: Math.floor(rng() * RUMORS.length),
     stats: { revenue: 0, tips: 0, cost: 0, buy: 0, spoil: 0, waste: 0, fines: 0, rewards: 0, served: 0, lost: 0, happy: 0, angry: 0, oos: 0 },
@@ -211,7 +211,6 @@ const A = {
     G.cash -= OIL_CHANGE_COST; G.stats.cost += OIL_CHANGE_COST; G.oilUse = 0; G.oilChange = 4; G.temp = 120; addLog('換了一鍋新油(-$150)');
   },
   toggle(s) { if (G.plate.length && !G.pay) G.season[s] = !G.season[s]; },
-  cut() { if (G.plate.length && G.cuts < G.cutsNeed && !G.pay) { G.cuts++; G.shake = 0.15; sfx('chop'); } },
   dump() { G.plate.forEach(it => G.stats.waste += ITEMS[it.key].cost); G.plate = []; resetPrep(); },
   bag() {
     if (G.pay) return;
@@ -422,7 +421,7 @@ window.addEventListener('keydown', e => {
   if (G.phase !== 'open') return;
   const m = { a: () => A.drop(MENU[0]), s: () => A.drop(MENU[1]), d: () => A.drop(MENU[2]), f: () => A.drop(MENU[3]), g: () => A.drop(MENU[4]), h: () => A.drop(MENU[5]),
     j: () => { if (G.counter && G.counter.type === 'byo') A.drop('byo'); },
-    '1': () => A.lift(0), '2': () => A.lift(1), '3': () => A.lift(2), '4': () => A.lift(3), '5': () => A.lift(4), '6': () => A.lift(5), '7': () => A.lift(6), '8': () => A.lift(7), '9': () => A.lift(8), o: A.changeOil, q: () => A.setTemp('low'), w: () => A.setTemp('mid'), e: () => A.setTemp('high'), ' ': A.liftAll, z: () => A.toggle('salt'), x: () => A.toggle('spicy'), c: () => A.toggle('basil'), v: A.cut, enter: A.bag };
+    '1': () => A.lift(0), '2': () => A.lift(1), '3': () => A.lift(2), '4': () => A.lift(3), '5': () => A.lift(4), '6': () => A.lift(5), '7': () => A.lift(6), '8': () => A.lift(7), '9': () => A.lift(8), o: A.changeOil, q: () => A.setTemp('low'), w: () => A.setTemp('mid'), e: () => A.setTemp('high'), ' ': A.liftAll, z: () => A.toggle('salt'), x: () => A.toggle('spicy'), c: () => A.toggle('basil'), enter: A.bag };
   if (m[k]) { m[k](); e.preventDefault(); }
 });
 
@@ -738,7 +737,7 @@ function drawRight() {
   panel(1026, 266, 246, 446, '');
   const c = G.counter, X = 1034;
   // 起鍋盤 / 收銀
-  text(G.pay ? '收銀' : '起鍋盤 — 調味、剪、裝袋', X, 284, 15, '#ffd59a');
+  text(G.pay ? '收銀' : '起鍋盤 — 調味、裝袋', X, 284, 15, '#ffd59a');
   if (!G.pay) {
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 296, 230, 112, 10); ctx.fill();
     if (!G.plate.length) text('(撈起的會放這裡)', X + 115, 352, 14, '#8a7a6a', 'center', 'normal');
@@ -748,16 +747,12 @@ function drawRight() {
     btn('salt', X, 416, 74, 44, '胡椒鹽 Z', () => A.toggle('salt'), { on: G.season.salt, enabled: en, color: '#6b4226', size: 12 });
     btn('spicy', X + 78, 416, 74, 44, '辣+5 X', () => A.toggle('spicy'), { on: G.season.spicy, enabled: en, color: '#6b4226', size: 12 });
     btn('basil', X + 156, 416, 74, 44, '九層塔 C', () => A.toggle('basil'), { on: G.season.basil, enabled: en, color: '#6b4226', size: 12 });
-    const needCut = en && G.cuts < G.cutsNeed;
-    btn('cut', X, 468, 136, 46, `✂ 剪 ${G.cuts}/${G.cutsNeed} V`, A.cut, { enabled: needCut, color: '#2a6f6a', size: 16 });
-    if (needCut) { const pu = 0.5 + 0.5 * Math.sin(performance.now() / 160) + (G.bagHint > 0 ? 0.5 : 0);
-      ctx.save(); ctx.strokeStyle = `rgba(255,214,102,${Math.min(1, 0.35 + pu * 0.6)})`; ctx.lineWidth = 3 + pu * 2; rr(X - 3, 465, 142, 52, 10); ctx.stroke(); ctx.restore(); }
-    btn('dump', X + 142, 468, 88, 46, '倒掉', A.dump, { enabled: en, color: '#6b4226', size: 15 });
-    const canBag = c && en && G.cuts >= G.cutsNeed && c.atCounter > 0.6;
+    btn('dump', X, 468, 230, 46, '倒掉', A.dump, { enabled: en, color: '#6b4226', size: 15 });
+    const canBag = c && en && c.atCounter > 0.6;
     if (c && c.atCounter > 0.5) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 592, 230, 112, 10); ctx.fill(); text('這單要的(✓=盤上有)', X + 8, 606, 13, '#ffd59a');
       const need = c.type === 'regular' && !c.swapped ? G.regularOrder.items : c.order.items; const pk = G.plate.map(q => q.key);
       need.forEach((k, i) => { const j = pk.indexOf(k); if (j >= 0) pk.splice(j, 1); text(`${j >= 0 ? '✓' : '·'} ${ITEMS[k].name}`, X + 10 + (i % 2) * 112, 628 + Math.floor(i / 2) * 20, 14, j >= 0 ? '#8ce99a' : '#d8c8b0'); }); }
-    const bagLabel = !c ? '🛍 裝袋(等客人)' : !en ? '🛍 裝袋(盤子空)' : G.cuts < G.cutsNeed ? `🛍 裝袋(先剪 ${G.cuts}/${G.cutsNeed})` : '🛍 裝袋 (Enter)';
+    const bagLabel = !c ? '🛍 裝袋(等客人)' : !en ? '🛍 裝袋(盤子空)' : c.atCounter <= 0.6 ? '🛍 裝袋(客人還沒到)' : '🛍 裝袋 (Enter)';
     btn('bag', X, 522, 230, 60, bagLabel, A.bag, { enabled: !!canBag, clickable: en && !!c, size: canBag ? 20 : 17 });
     if (G.bagHint > 0) G.bagHint -= 1 / 60;
   } else {
@@ -780,7 +775,6 @@ function bagBlock() {
   if (!G.plate.length) return '盤子是空的:先撈起炸好的料';
   if (!G.counter) return '還沒有客人,等客人來再裝袋';
   if (G.counter.atCounter <= 0.6) return '客人還沒走到櫃台';
-  if (G.cuts < G.cutsNeed) return `先按發亮的「✂ 剪」${G.cutsNeed - G.cuts} 下`;
   return '';
 }
 function hint() {
@@ -790,8 +784,7 @@ function hint() {
   if (G.pay) return G.pay.offer < G.pay.price ? '客人在殺價:成交、讓價或堅持原價?' : '收錢!';
   if (c.atCounter > 0.6 && shortItems(c).length) return '這單的料不夠了:道歉換單(沒小費、耐心-30%)或請客人離開';
   if (c.sus && c.atCounter > 1) return '這包自備料看起來怪怪的…要幫他炸,還是檢舉?';
-  if (G.plate.length && G.cuts >= G.cutsNeed) return '按「裝袋」交給客人';
-  if (G.plate.length) return `調味(胡椒鹽/辣粉/九層塔)後,按發亮的「✂ 剪」${G.cutsNeed - G.cuts} 下,才能裝袋`;
+  if (G.plate.length) return '可調味(胡椒鹽/辣粉/九層塔),再按「裝袋」交給客人';
   const rd = G.fryer.findIndex(it => it && it.d >= ITEMS[it.key].lo && it.d < 100);
   if (rd >= 0) return `${rd + 1} 號網「剛好!」→ 按 ${rd + 1} 或點那個網撈起(空白鍵撈全部熟的)`;
   if (G.fryer.some(Boolean)) return '熟度條的白線走到綠色就「剛好!」;紅色「快焦!」要馬上撈';
@@ -854,7 +847,7 @@ function drawTitle(time) {
   ctx.fillStyle = 'rgba(10,5,3,0.78)'; rr(220, 170, 840, 520, 20); ctx.fill();
   ctx.shadowColor = '#ff5a36'; ctx.shadowBlur = 24; text('夜市攤位 · 鹽酥雞攤', 640, 215, 48, '#ffcf6b', 'center'); ctx.shadowBlur = 0;
   text(`本金 $${START_CASH} · 每晚收攤付攤租(第 1 晚 $${rentFor(1)},之後每晚 +$80)`, 640, 262, 18, '#ffd59a', 'center', 'normal');
-  const lines = ['① 開攤前「進貨」:錢花下去才有料,沒賣完的會隔夜不新鮮、甚至報廢', '② 客人點單會夾在上方的菜單夾;點食材櫃下鍋,熟度到綠色按 1–6 撈起', '③ 胡椒鹽 Z、辣粉 X、九層塔 C → 剪 V → 裝袋 Enter → 收錢(小心殺價)', '④ 缺貨時可以道歉換單,或請客人離開;收攤後付攤租,付不出就欠債', '⑤ 賺到錢去「設備店」升級:更多方籃、冰箱、濾油機、霓虹招牌…', '連續兩晚付不出攤租 → 攤位被收回。能撐幾晚?'];
+  const lines = ['① 開攤前「進貨」:錢花下去才有料,沒賣完的會隔夜不新鮮、甚至報廢', '② 客人點單會夾在上方的菜單夾;點食材櫃下鍋,熟度到綠色按 1–6 撈起', '③ 胡椒鹽 Z、辣粉 X、九層塔 C → 裝袋 Enter → 收錢(小心殺價)', '④ 缺貨時可以道歉換單,或請客人離開;收攤後付攤租,付不出就欠債', '⑤ 賺到錢去「設備店」升級:更多方籃、冰箱、濾油機、霓虹招牌…', '連續兩晚付不出攤租 → 攤位被收回。能撐幾晚?'];
   lines.forEach((l, i) => text(l, 270, 305 + i * 34, 17, i === 5 ? '#ffd166' : '#f3e6d0', 'left', 'normal'));
   const sv = loadSave(true);
   if (sv) { btn('continue', 400, 540, 230, 60, `繼續 第 ${sv.night} 晚`, A.cont, { size: 24 }); btn('newRun', 650, 540, 230, 60, '重新開始', A.newRun, { size: 22, color: '#6b4226' });
