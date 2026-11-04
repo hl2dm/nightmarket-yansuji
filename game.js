@@ -32,7 +32,9 @@ loadImg('bg', 'art/bg_stall.jpg');
 ['chicken','tempura','riceblood','bean','mushroom','squid'].forEach(k => loadImg('f_' + k, `art/food_${k}.png`));
 loadImg('tankTop', 'art/fryer_top.jpg'); loadImg('basketTop', 'art/basket_top.png');
 // v3.2:Grok 像素素材(assets/,由 _tools/cutout.py 去綠幕產生);沒載到就退回上面的舊圖
-['chicken','tempura','riceblood','bean','mushroom','squid','byo'].forEach(k => { loadImg('raw_' + k, `assets/food_${k}_raw.png`); loadImg('fr_' + k, `assets/food_${k}_fried.png`); });
+// v42:雞排改用 cutlet(整片)圖;鹽酥雞沿用原本一塊塊的雞肉圖
+const ART_FILE = { chicken: 'cutlet', saltchicken: 'chicken' };
+['chicken','saltchicken','tempura','riceblood','bean','mushroom','squid','byo'].forEach(k => { const f = ART_FILE[k] || k; loadImg('raw_' + k, `assets/food_${f}_raw.png`); loadImg('fr_' + k, `assets/food_${f}_fried.png`); });
 loadImg('burnt', 'assets/food_burnt.png'); loadImg('bigNet', 'assets/basket_big.png'); loadImg('smallNet', 'assets/basket_small.png');
 loadImg('tank2', 'assets/fryer_tank.png'); loadImg('uiCash', 'assets/ui_cash.png'); loadImg('uiRep', 'assets/ui_rep.png');
 loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bowl_chili.png'); loadImg('bowl_basil', 'assets/food_basil_fried.png'); loadImg('scissorsP', 'assets/scissors.png'); loadImg('bagP', 'assets/food_bag.png'); loadImg('cashTray', 'assets/cash_tray.png');
@@ -40,7 +42,7 @@ loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bo
 ['bigNet','smallNet','fridge','filter','neon','fan','bulk'].forEach(k => loadImg('upg_' + k, `assets/upg_${k}.png`));
 const sfx = (n, ...a) => { const S = window.SFX; if (S && S[n]) S[n](...a); };
 const foodImg = (k, fried = true) => IMG[(fried ? 'fr_' : 'raw_') + k] || IMG['f_' + (IMG_ALIAS[k] || k)];
-const IMG_ALIAS = { byo: 'mushroom' };
+const IMG_ALIAS = { byo: 'mushroom', saltchicken: 'chicken' };
 
 // ---------- 狀態 ----------
 let G;
@@ -78,7 +80,7 @@ function saveGame() {
 }
 function loadSave(peek) {
   try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!d || peek) return d;
-    Object.assign(G, { night: d.night, cash: d.cash, debt: d.debt, debtStrikes: d.debtStrikes, rep: d.rep, upgrades: (d.upgrades || []).map(u => u === 'baskets' ? 'bigNet' : u), inv: d.inv, regularOrder: d.regularOrder, best: d.best || 0 });
+    Object.assign(G, { night: d.night, cash: d.cash, debt: d.debt, debtStrikes: d.debtStrikes, rep: d.rep, upgrades: (d.upgrades || []).map(u => u === 'baskets' ? 'bigNet' : u), inv: Object.assign(Object.fromEntries(MENU.map(k => [k, { fresh: 0, old: 0 }])), d.inv), regularOrder: d.regularOrder, best: d.best || 0 });
     newNight(); G.phase = d.phase === 'shop' ? 'shop' : 'stock'; return d; } catch (e) { return null; }
 }
 // ---------- 油槽格子(俯視 6×3) ----------
@@ -97,7 +99,7 @@ function slotRect(i) { return cellRect(G.baskets[i]); }
 function freeBasket(k) { // v41:只找空的、不在油裡的網
   return G.baskets.findIndex((b, j) => !b.locked && !b.inOil && !G.fryer[j].length && b.s === ITEMS[k].size);
 }
-const BOWL_CAP = 6;
+const BOWL_CAP = 8;
 const bowlItems = () => G.bowls.flatMap(b => b.items);
 const fried = () => G.fryer.flat();
 // v40:整網共用一個計時。網的熟度 p(0–100):SH_LO–SH_HI 是整網「剛好」區;每份料的 d 由 p 換算到自己的熟度區,所以整網一起熟、一起焦
@@ -134,12 +136,19 @@ function buildSchedule() {
 }
 
 function makeOrder(type) {
-  if (type === 'regular') return { ...G.regularOrder, items: [...G.regularOrder.items] };
-  if (type === 'byo') return { items: ['byo', 'byo'], spicy: rng() < 0.5, basil: false };
-  const n = type === 'student' ? 1 + (rng() < 0.4 ? 1 : 0) : type === 'aunt' ? 3 + (rng() < 0.5 ? 1 : 0) : 1 + Math.floor(rng() * 3);
-  const items = []; for (let i = 0; i < n; i++) { let k = pick(MENU); if (stockOf(k) <= (countBy(items)[k] || 0)) { const ok = MENU.filter(m => stockOf(m) > (countBy(items)[m] || 0)); if (ok.length && rng() < 0.7) k = pick(ok); } items.push(k); }
+  if (type === 'regular') return { ...G.regularOrder, items: [...G.regularOrder.items], add: G.regularOrder.items.filter(k => ITEMS[k].vendor) };
+  if (type === 'byo') return { items: ['byo', 'byo'], add: [], spicy: rng() < 0.5, basil: false };
+  // v42:客人自己從展示櫃撿 n 樣進鐵盆;雞排/鹽酥雞是攤家顧的(一定要老闆補);偶爾口頭「再加一份」
+  const n = type === 'student' ? 1 + (rng() < 0.4 ? 1 : 0) : type === 'aunt' ? 3 + (rng() < 0.5 ? 1 : 0) : 2 + Math.floor(rng() * 2);
+  const items = [], add = [];
+  const pickSelf = () => { let k = pick(SELF_MENU); if (stockOf(k) <= (countBy(items)[k] || 0)) { const ok = SELF_MENU.filter(m => stockOf(m) > (countBy(items)[m] || 0)); if (ok.length && rng() < 0.7) k = pick(ok); } return k; };
+  for (let i = 0; i < n; i++) items.push(pickSelf());
+  const vp = type === 'student' ? 0.45 : 0.3;
+  if (rng() < vp) { items.push('chicken'); add.push('chicken'); }
+  if (rng() < vp) { items.push('saltchicken'); add.push('saltchicken'); }
+  if (rng() < 0.3) { const m = rng() < 0.3 ? 2 : 1; for (let i = 0; i < m; i++) { const k = pickSelf(); items.push(k); add.push(k); } }
   items.sort((a, b) => MENU.indexOf(a) - MENU.indexOf(b));
-  return { items, spicy: rng() < 0.5, basil: rng() < 0.4 };
+  return { items, add, spicy: rng() < 0.5, basil: rng() < 0.4 };
 }
 
 function spawn(type) {
@@ -197,12 +206,15 @@ const A = {
     shortItems(c).forEach(k => { let lack = need[k] - availFor(k); for (let i = 0; i < c.order.items.length && lack > 0; i++) if (c.order.items[i] === k) {
       const used = countBy(c.order.items); const ok = MENU.filter(m => m !== k && availFor(m) > (used[m] || 0)); if (!ok.length) break; c.order.items[i] = pick(ok); lack--; } });
     if (shortItems(c).length) { A.sendAway(); return; }
-    c.order.items.sort((a, b) => MENU.indexOf(a) - MENU.indexOf(b));
+    c.order.items.sort((a, b) => MENU.indexOf(a) - MENU.indexOf(b)); c.order.add = (c.order.add || []).filter(k => c.order.items.includes(k));
     c.swapped = true; c.noTip = true; c.patience -= c.max * 0.3; c.line = '沒有喔…好啦,那換這些。'; addLog('缺貨,跟客人道歉換單'); },
   sendAway() { const c = G.counter; if (!c) return; G.stats.lost++; G.stats.oos++; changeRep(-2); addLog('缺貨,客人沒買就走了(口碑 -2)'); leave(c, '沒有?那不用了。', true); resetPrep(); },
   // v41:點食材 = 撿進鐵盆(不是直接進網)
   drop(k) {
-    const cid = G.counter ? G.counter.id : 0;
+    const cc = G.counter;
+    if (cc && !cc.handed && !G.pay) { popup('等客人把鐵盆交給你', 130, 520, '#ffb703'); return; }
+    const cid = cc ? cc.id : 0;
+    if (cc && cc.handed) { const hb = G.bowls.findIndex(b => b.cid === cid && b.items.length); if (hb >= 0) G.bowlSel = hb; }
     let bi = G.bowlSel; const bw = G.bowls[bi];
     if (bw.items.length && bw.cid !== cid) { const e = G.bowls.findIndex(b => !b.items.length || b.cid === cid); if (e >= 0) bi = e; } // 換了客人 → 用另一個盆
     const B = G.bowls[bi];
@@ -216,6 +228,7 @@ const A = {
   pour(bi) {
     if (bi === undefined) { bi = G.bowls[G.bowlSel].items.length ? G.bowlSel : G.bowls.findIndex(b => b.items.length); if (bi < 0) return; }
     const B = G.bowls[bi]; if (!B.items.length) { G.bowlSel = bi; return; }
+    const oc = G.counter; if (oc && oc.handed && B.cid === oc.id && !G.pay) { const ml = mustLeft(oc); if (ml.length) { G.bowlSel = bi; G.mustFlash = 1; popup(`還要補:${orderText(ml)}`, 300, 470, '#ffb703'); return; } }
     if (G.oilChange > 0) { popup('換油中,等一下', 640, 560, '#ff6b6b'); return; }
     const keep = [], L = B.items.filter(it => ITEMS[it.key].size === 'L'), S = B.items.filter(it => ITEMS[it.key].size !== 'L'), used = [];
     const mk = it => ({ key: it.key, d: 0, cold: 0, age: 0, old: it.old, cid: B.cid, cue: 0 });
@@ -278,6 +291,30 @@ const A = {
   refuse() { addLog('拒絕賣給客人'); G.stats.waste += G.pay.matchedCost; leave(G.counter, '哼!', true); G.plate = []; resetPrep(); },
 };
 
+// v42:客人把自己撿好的鐵盆交給老闆(料從展示櫃拿,扣庫存);攤家料 + 口頭加點 = 老闆要補的
+function handOver(c) {
+  let bi = G.bowls.findIndex(b => b.cid === c.id); if (bi < 0) bi = G.bowls.findIndex(b => !b.items.length);
+  if (bi < 0) { c.waitBowl = true; return; }
+  c.waitBowl = false;
+  const add = countBy(c.order.add || []), picked = [], need = [];
+  c.order.items.forEach(k => { if (add[k] > 0 || ITEMS[k].vendor) { if (add[k]) add[k]--; need.push(k); } else picked.push(k); });
+  const B = G.bowls[bi], got = [];
+  picked.forEach(k => { const v = G.inv[k]; let old = false;
+    if (!v) { got.push({ key: k, old: false }); return; } // byo 自備料
+    if (v.old > 0) { v.old--; old = true; } else if (v.fresh > 0) v.fresh--; else { need.push(k); return; } // 展示櫃剛好沒了 → 改成老闆補
+    got.push({ key: k, old }); });
+  B.items.push(...got); B.cid = c.id; G.bowlSel = bi;
+  c.handed = true; c.picked = got.map(it => it.key); c.need = need;
+  const ex = (c.order.add || []).filter(k => !ITEMS[k].vendor), vd = need.filter(k => ITEMS[k].vendor);
+  if (c.type !== 'byo' && c.type !== 'regular') c.line = ex.length ? `${c.picked.length ? '這盆我撿好了,' : ''}再加一份${orderText(ex)}!${vd.length ? `還有${orderText(vd)}。` : ''}` : vd.length ? `我撿好了~${orderText(vd)}也要一份!` : pick(LINES.greet);
+  G.handAnim = { t: 0, bi, keys: c.picked.slice() }; sfx('drop');
+}
+function mustLeft(c) { // 這單還缺哪些料(盆+鍋+盤都沒有的)
+  if (!c || !c.handed) return [];
+  const have = G.plate.concat(fried(), bowlItems()).map(it => it.key), out = [];
+  c.order.items.forEach(k => { const j = have.indexOf(k); if (j >= 0) have.splice(j, 1); else out.push(k); });
+  return out;
+}
 function resetPrep() { G.season = { salt: false, spicy: false, basil: false }; G.cuts = 0; G.pay = null; }
 
 function settle() {
@@ -300,15 +337,22 @@ function settle() {
   if (G.season.basil !== o.basil) { sat -= 12; notes.push(o.basil ? '沒有九層塔' : '不要九層塔啦'); }
   if (c.patience / c.max < 0.3) sat -= 10;
   sat = clamp(sat, 0, 100);
-  let price = served.reduce((a, it) => a + ITEMS[it.key].price, 0);
-  if (G.season.spicy && o.spicy) price += SEASON_PRICE.spicy;
-  if (G.season.basil && o.basil) price += SEASON_PRICE.basil;
+  // v42:應收 = 每份料的單價逐項加總 + 調味加價;品質/小費另列
+  const lines = served.map(it => [ITEMS[it.key].name, ITEMS[it.key].price]);
+  const base = lines.reduce((a, l) => a + l[1], 0);
+  if (G.season.spicy && o.spicy) lines.push(['辣粉', SEASON_PRICE.spicy]);
+  if (G.season.basil && o.basil) lines.push(['九層塔', SEASON_PRICE.basil]);
+  let price = lines.reduce((a, l) => a + l[1], 0);
+  const missNames = Object.keys(need).filter(k => need[k] > 0).map(k => `${ITEMS[k].name}×${need[k]}`);
   const ct = CTYPES[c.type];
+  let tip = 0;
+  if (!c.noTip && c.type === 'drunk' && rng() < 0.2) tip = 20;
+  if (!c.noTip && sat >= 90 && (c.type === 'regular' || rng() < 0.4)) tip += Math.max(5, Math.round(base * 0.08 / 5) * 5) + (c.type === 'regular' ? 5 : 0);
   let offer = price;
   if (sat < 40) { offer = Math.round(price * 0.5); c.line = '這樣也敢收全價?' + (notes[0] ? `(${notes[0]})` : ''); }
   else if (rng() < ct.haggle + (G.rumorId === 1 ? 0.15 : 0)) { offer = Math.round(price * rand(...ct.offer) / 5) * 5; c.line = c.type === 'aunt' ? `算 $${offer} 啦,好不好~` : `$${offer} 啦,便宜一點~`; }
   else c.line = sat >= 80 ? pick(LINES.happy) : notes.length ? `嗯…${notes[0]}。` : pick(LINES.ok);
-  G.pay = { price, offer: Math.min(offer, price), sat, notes, matchedCost: served.reduce((a, it) => a + ITEMS[it.key].cost, 0), midTried: false };
+  G.pay = { price, base, lines, missNames, tip, offer: Math.min(offer, price), sat, notes, matchedCost: served.reduce((a, it) => a + ITEMS[it.key].cost, 0), midTried: false };
   rest.forEach(it => G.stats.waste += ITEMS[it.key].cost);
   G.plate = []; G.lastServed = served;
   // 稽查員判定
@@ -329,9 +373,7 @@ function settle() {
 
 function finishPay(amount) {
   const c = G.counter, p = G.pay;
-  let tip = 0;
-  if (c.noTip) {} else if (c.type === 'drunk' && rng() < 0.2) { tip = 20; c.line = '嗝…不用找了!'; }
-  if (!c.noTip && p.sat >= 90 && (c.type === 'regular' || rng() < 0.4)) tip += c.type === 'regular' ? 10 : 5;
+  const tip = p.tip || 0; if (c.type === 'drunk' && tip >= 20) c.line = '嗝…不用找了!';
   sfx('cash'); G.stats.revenue += amount; G.cash += amount + tip; G.stats.tips += tip; G.stats.served++;
   popup(`+$${amount + tip}${tip ? `(小費 ${tip})` : ''}`, 1060, 600, '#ffd166');
   if (p.sat >= 80) { changeRep(1.5); G.stats.happy++; } else if (p.sat >= 50) changeRep(0.5); else { changeRep(-2); G.stats.angry++; }
@@ -352,6 +394,7 @@ function doReport() {
 }
 
 function leave(c, line, angry) {
+  G.bowls.forEach((b, i) => { if (b.cid === c.id && b.items.length) A.clearBowl(i); });
   c.line = line; c.angry = angry; G.lastLine = { who: c.revealed ? '衛生局稽查員' : CTYPES[c.type].label, text: line, angry, t: 2.5 }; G.walkers.push({ c, x: c.x || COUNTER_X, dir: -1, sayT: 1.8 }); G.counter = null;
 }
 
@@ -392,12 +435,15 @@ function update(dt) {
   if (c) {
     c.x += clamp(COUNTER_X - c.x, -300 * dt, 300 * dt); c.atCounter += dt;
     c.waited = (c.waited || 0) + dt; if (!G.pay) c.patience -= dt;
-    if (c.type === 'drunk' && !c.changed && c.atCounter > 6 && !G.pay) {
-      c.changed = true; const i = Math.floor(rng() * c.order.items.length); c.order.items[i] = pick(MENU.filter(k => k !== c.order.items[i]));
-      c.line = LINES.drunkChange; popup('改單了!', 900, 230, '#ffb703');
+    if (c.type === 'drunk' && !c.changed && c.handed && c.atCounter > 6 && !G.pay) {
+      c.changed = true; const ok = MENU.filter(k => stockOf(k) > 0); const k = ok.length ? pick(ok) : 'tempura'; c.order.items.push(k); (c.order.add = c.order.add || []).push(k); c.order.items.sort((a, b) => MENU.indexOf(a) - MENU.indexOf(b));
+      c.line = `嗝…再、再加一份${ITEMS[k].name}啦!`; popup('臨時加點!', 900, 230, '#ffb703');
     }
+    if (!c.handed && c.atCounter > 0.6 && !G.pay && !shortItems(c).length) handOver(c);
     if (c.patience <= 0) { G.stats.lost++; G.stats.angry++; changeRep(-2); addLog(`${CTYPES[c.type].label}等太久,生氣走了`); leave(c, pick(LINES.angry.slice(1)), true); resetPrep(); }
   }
+  if (G.handAnim) { G.handAnim.t += dt / SPEED; if (G.handAnim.t > 0.9) G.handAnim = null; }
+  if (G.mustFlash > 0) G.mustFlash -= dt / SPEED;
   if (G.lastLine) { G.lastLine.t -= dt; if (G.lastLine.t <= 0) G.lastLine = null; }
   G.walkers.forEach(w => { w.x += w.dir * 220 * dt; if (w.sayT) w.sayT -= dt; }); G.walkers = G.walkers.filter(w => w.x > 180 && w.x < 1400);
   // 收攤
@@ -465,7 +511,7 @@ window.addEventListener('keydown', e => {
   if (G.phase === 'stock' && k === 'enter') { A.open(); return; }
   if (G.phase !== 'open') return;
   const m = { a: () => A.drop(MENU[0]), s: () => A.drop(MENU[1]), d: () => A.drop(MENU[2]), f: () => A.drop(MENU[3]), g: () => A.drop(MENU[4]), h: () => A.drop(MENU[5]),
-    j: () => { if (G.counter && G.counter.type === 'byo') A.drop('byo'); },
+    j: () => A.drop(MENU[6]),
     '1': () => A.tapNet(0), '2': () => A.tapNet(1), '3': () => A.tapNet(2), '4': () => A.tapNet(3), '5': () => A.tapNet(4), '6': () => A.tapNet(5), v: () => A.pour(), b: () => { G.bowlSel = 1 - G.bowlSel; }, o: A.changeOil, q: () => A.setTemp('low'), w: () => A.setTemp('mid'), e: () => A.setTemp('high'), ' ': A.liftAll, z: () => A.toggle('salt'), x: () => A.toggle('spicy'), c: () => A.toggle('basil'), enter: A.bag };
   if (m[k]) { m[k](); e.preventDefault(); }
 });
@@ -657,16 +703,18 @@ function drawStripBubble(c) {
     btn('swapOrder', x + w - 252, y + 72, 120, 34, '🙇 道歉換單', A.swapOrder, { enabled: !c.swapped, color: '#2a6f6a', size: 13 });
     btn('sendAway', x + w - 126, y + 72, 118, 34, '請他離開(-2)', A.sendAway, { color: '#4a4a4a', size: 13 });
   } else {
-    if (c.type === 'regular' && !c.swapped) text('點餐:老樣子(看左邊熟客筆記)', x + 14, y + 92, 15, '#555');
-    else wrap('點餐:' + orderText(c.order.items), x + 14, y + 92, w - 140, 15, '#333', 18);
+    if (c.type === 'regular' && !c.swapped && !c.handed) text('點餐:老樣子(看左邊熟客筆記)', x + 14, y + 92, 15, '#555');
+    else if (!c.handed) wrap(c.waitBowl ? '⚠ 兩個鐵盆都有料 — 先把盆下鍋才能接客人的盆' : '客人正把撿好的鐵盆遞給你…', x + 14, y + 92, w - 140, 14, c.waitBowl ? '#d62828' : '#555', 18);
+    else { const ml = mustLeft(c); text(c.picked.length ? `盆裡:${orderText(c.picked)}` : '盆裡:(空)', x + 14, y + 82, 13, '#2a7d4f');
+      text(ml.length ? `要你補:${orderText(ml)}` : (c.need.length ? `已補好:${orderText(c.need)} ✓ 可以下鍋` : '不用補,直接下鍋'), x + 14, y + 100, 14, ml.length ? '#d9480f' : '#2a7d4f'); }
     if (c.type === 'byo' || c.sus) btn('report', x + w - 112, y + 74, 100, 32, '🚨 檢舉', A.report, { color: '#3b5b92', size: 14 });
   }
 }
 
 // ---------- 左欄:食材、油溫、換油、熟客筆記 ----------
 function drawLeft() {
-  panel(8, 266, 244, 446, '食材 — 點了撿進鐵盆');
-  const keys = [...MENU]; if (G.counter && G.counter.type === 'byo') keys.push('byo');
+  panel(8, 266, 244, 446, '展示櫃 — 客人自己撿;橘框=老闆補');
+  const keys = [...MENU], mlk = G.counter && !G.pay ? mustLeft(G.counter) : [];
   keys.forEach((k, i) => {
     const bx = 16 + (i % 2) * 118, by = 290 + Math.floor(i / 2) * 56, I = ITEMS[k];
     const q = k === 'byo' ? 1 : stockOf(k), big = I.size === 'L';
@@ -674,9 +722,11 @@ function drawLeft() {
     btn('item_' + k, bx, by, 112, 52, '', () => A.drop(k), { color: '#6b4226', enabled: q > 0 && !full });
     const fim = foodImg(k, false);
     if (fim) { ctx.save(); if (k === 'byo' && !IMG.raw_byo) ctx.filter = 'hue-rotate(60deg) saturate(0.6)'; ctx.drawImage(fim, bx + 3, by + 6, 40, 40); ctx.restore(); }
-    text(I.name, bx + 48, by + 13, 15);
-    ctx.fillStyle = big ? '#e07a1f' : '#3b7fb8'; rr(bx + 86, by + 24, 22, 14, 4); ctx.fill(); text(big ? '大' : '小', bx + 97, by + 31, 11, '#fff', 'center');
-    text((k === 'byo' ? '代炸' : `$${I.price}`) + ' ' + 'ASDFGHJ'[i], bx + 48, by + 31, 11, '#ffd59a', 'left', 'normal');
+    if (mlk.includes(k) && Math.sin(performance.now() / 120) > -0.3) { ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 3.5; rr(bx - 1, by - 1, 114, 54, 9); ctx.stroke(); }
+    if (I.vendor) { ctx.fillStyle = '#c0392b'; rr(bx + 2, by + 2, 26, 13, 4); ctx.fill(); text('攤家', bx + 15, by + 8.5, 9, '#fff', 'center'); }
+    text(I.name, bx + 46, by + 12, 15);
+    ctx.fillStyle = big ? '#e07a1f' : '#3b7fb8'; rr(bx + 90, by + 4, 18, 14, 4); ctx.fill(); text(big ? '大' : '小', bx + 99, by + 11, 10, '#fff', 'center');
+    text(`$${I.price}`, bx + 46, by + 29, 15, '#ffd166'); text('ASDFGHJ'[i], bx + 100, by + 29, 11, '#bba', 'center', 'normal');
     if (k !== 'byo') { const v = G.inv[k] || { old: 0 }; const lab = q <= 0 ? '缺貨' : `剩${q}${v.old ? `(夜${v.old})` : ''}`;
       ctx.fillStyle = q <= 0 ? '#d62828' : q <= 3 ? '#e9a400' : 'rgba(0,0,0,0.45)'; rr(bx + 46, by + 39, 62, 11, 4); ctx.fill(); text(lab, bx + 77, by + 44.5, 10, '#fff', 'center'); }
   });
@@ -705,17 +755,20 @@ function drawBowl(bi, B, x, y, w, h, cid) {
   ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, cy, R - 7, (R - 7) * 0.86, 0, 0, 7); ctx.fill(); // 盆內
   ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(cx, cy, R - 7, (R - 7) * 0.86, 0, Math.PI * 1.05, Math.PI * 1.6); ctx.stroke();
   ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(cx, cy + 2, R - 20, (R - 20) * 0.86, 0, 0, 7); ctx.stroke(); // 盆底圈
-  // 盆裡的料
-  B.items.forEach((it, j) => { const a = j / Math.max(1, n) * Math.PI * 2 + bi, rr2 = n === 1 ? 0 : n <= 3 ? 14 : 20;
+  // 盆裡的料(交盆動畫飛行中先不畫)
+  if (!(G.handAnim && G.handAnim.bi === bi && G.handAnim.t < 0.6)) B.items.forEach((it, j) => { const a = j / Math.max(1, n) * Math.PI * 2 + bi, rr2 = n === 1 ? 0 : n <= 3 ? 14 : 20;
     const ix = cx + Math.cos(a) * rr2, iy = cy + Math.sin(a) * rr2 * 0.8, s = ITEMS[it.key].size === 'L' ? 40 : 30;
     const im = IMG['raw_' + it.key] || foodImg(it.key, false);
     if (im) { const sc = s / Math.max(im.width, im.height); ctx.drawImage(im, ix - im.width * sc / 2, iy - im.height * sc / 2, im.width * sc, im.height * sc); }
     else { ctx.fillStyle = ITEMS[it.key].color; ctx.beginPath(); ctx.arc(ix, iy, s / 3, 0, 7); ctx.fill(); } });
   ctx.restore();
-  text(`${bi + 1}號盆 ${n}/${BOWL_CAP}`, x + 6, y + 10, 12, sel ? '#ffd166' : '#d8c8b0', 'left');
+  text(`${bi + 1}號盆 ${n}`, x + 6, y + 10, 12, sel ? '#ffd166' : '#d8c8b0', 'left');
   if (n && B.cid === cid) { ctx.fillStyle = '#4cc9f0'; rr(x + w - 36, y + 3, 32, 15, 4); ctx.fill(); text('這單', x + w - 20, y + 10.5, 10, '#06283d', 'center'); }
-  const lab = n ? '▼ 按盆下鍋' : sel ? '點食材撿進來' : '點選這個盆';
-  ctx.fillStyle = n ? '#c0392b' : 'rgba(0,0,0,0.55)'; rr(x + 6, y + h - 20, w - 12, 16, 5); ctx.fill(); text(lab, cx, y + h - 12, 11, '#fff', 'center');
+  else if (n && B.cid) { ctx.fillStyle = '#888'; rr(x + w - 36, y + 3, 32, 15, 4); ctx.fill(); text('上一單', x + w - 20, y + 10.5, 9, '#fff', 'center'); }
+  const cc = G.counter, mine = n && cc && cc.handed && B.cid === cc.id && !G.pay, ml = mine ? mustLeft(cc) : [];
+  if (ml.length) { ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = G.mustFlash > 0 && Math.sin(performance.now() / 80) > 0 ? 5 : 3; rr(x, y, w, h, 10); ctx.stroke(); }
+  const lab = ml.length ? `還要補 ${ml.length} 樣` : n ? '▼ 按盆下鍋' : sel ? '等客人交盆' : '空盆';
+  ctx.fillStyle = ml.length ? '#e07a1f' : n ? '#c0392b' : 'rgba(0,0,0,0.55)'; rr(x + 6, y + h - 20, w - 12, 16, 5); ctx.fill(); text(lab, cx, y + h - 12, 11, '#fff', 'center');
 }
 
 // ---------- 中央:俯視油槽 ----------
@@ -741,7 +794,7 @@ function drawTank() {
   if (G.oilChange > 0) { ctx.fillStyle = 'rgba(0,0,0,0.65)'; rr(400, 440, 476, 80, 12); ctx.fill(); text(`換油中… ${G.oilChange.toFixed(1)}s`, 638, 480, 30, '#fff', 'center'); }
   // 下緣控制條
   ctx.fillStyle = 'rgba(10,6,4,0.8)'; rr(266, 658, 744, 48, 10); ctx.fill();
-  text(`① 點食材撿進鐵盆 → ② 按鐵盆(V)倒進空網下鍋 → ③ 熟了點網子(1–6)整網撈`, 280, 671, 13, '#d8c8b0', 'left', 'normal');
+  text(`① 客人交盆,補上橘色的料(雞排/鹽酥雞/加點) → ② 按鐵盆(V)下鍋 → ③ 熟了點網子(1–6)整網撈`, 280, 671, 13, '#d8c8b0', 'left', 'normal');
   const cnt = s => G.baskets.filter((b, j) => b.s === s && !b.locked && !G.fryer[j].length).length, bowlN = bowlItems().length;
   text(`雞排→大網 · 小料每 ${SMALL_CAP} 份一小網`, 280, 693, 14, '#ffd59a', 'left', 'normal');
   text(`空大網 ${cnt('L')} · 空小網 ${cnt('S')}`, 500, 693, 15, G.fullFlash > 0 ? '#ff6b6b' : '#b7e4c7', 'left');
@@ -842,27 +895,56 @@ function drawRight() {
     shaker('basil', X + 156, 410, '九層塔 C', '#3f8f3a', '#1f4f1c', G.season.basil, en);
     btn('dump', X, 468, 230, 46, '倒掉', A.dump, { enabled: en, color: '#6b4226', size: 15 });
     const canBag = c && en && c.atCounter > 0.6;
-    if (c && c.atCounter > 0.5) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 592, 230, 112, 10); ctx.fill(); text('這單要的(✓=盤上有)', X + 8, 606, 13, '#ffd59a');
-      const need = c.type === 'regular' && !c.swapped ? G.regularOrder.items : c.order.items; const pk = G.plate.map(q => q.key);
-      need.forEach((k, i) => { const j = pk.indexOf(k); if (j >= 0) pk.splice(j, 1); text(`${j >= 0 ? '✓' : '·'} ${ITEMS[k].name}`, X + 10 + (i % 2) * 112, 628 + Math.floor(i / 2) * 20, 14, j >= 0 ? '#8ce99a' : '#d8c8b0'); }); }
+    if (c && c.atCounter > 0.5) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 592, 230, 112, 10); ctx.fill(); text('這單(✓=盤上有 · 橘=要你補)', X + 8, 606, 13, '#ffd59a');
+      const need = c.order.items; const pk = G.plate.map(q => q.key), ml = mustLeft(c);
+      need.slice(0, 8).forEach((k, i) => { const j = pk.indexOf(k); if (j >= 0) pk.splice(j, 1); const mi = ml.indexOf(k), must = j < 0 && mi >= 0; if (must) ml.splice(mi, 1);
+        text(`${j >= 0 ? '✓' : must ? '＋' : '·'} ${ITEMS[k].name} $${ITEMS[k].price}`, X + 10 + (i % 2) * 112, 626 + Math.floor(i / 2) * 19, 13, j >= 0 ? '#8ce99a' : must ? '#ff9f1c' : '#d8c8b0'); }); }
     const bagLabel = !c ? '🛍 裝袋(等客人)' : !en ? '🛍 裝袋(盤子空)' : c.atCounter <= 0.6 ? '🛍 裝袋(客人還沒到)' : '🛍 裝袋 (Enter)';
     btn('bag', X, 522, 230, 60, bagLabel, A.bag, { enabled: !!canBag, clickable: en && !!c, size: canBag ? 20 : 17 });
     if (G.bagHint > 0) G.bagHint -= 1 / 60;
   } else {
     const p = G.pay;
-    text(`應收 $${p.price}`, X + 4, 310, 24, '#ffd166');
+    // v42:逐項收據
+    ctx.fillStyle = '#fbf6e9'; rr(X, 294, 230, 210, 6); ctx.fill();
+    text('收據(逐項加總)', X + 8, 306, 12, '#7a4b00');
+    const L = p.lines || [], cols = L.length > 7 ? 2 : 1, per = Math.ceil(L.length / cols), lh = per > 7 ? 14 : 17;
+    L.forEach(([nm, v], i) => { const cx2 = X + 8 + Math.floor(i / per) * 112, cy2 = 324 + (i % per) * lh, cw2 = cols === 2 ? 104 : 214;
+      text(nm, cx2, cy2, 13, '#2b1a0e', 'left', 'normal'); text(`${v}`, cx2 + cw2, cy2, 13, '#2b1a0e', 'right'); });
+    let yy = 324 + per * lh + 2; ctx.fillStyle = '#c9b89a'; ctx.fillRect(X + 8, yy - 6, 214, 1.5);
+    ctx.font = `bold 11px ${FONT}`; const nums = L.map(l => l[1]); let f = nums.join('+') + ` = $${p.price}`; for (let m = nums.length - 1; m > 1 && ctx.measureText(f).width > 214; m--) f = nums.slice(0, m).join('+') + '+… = $' + p.price;
+    text(f, X + 8, yy + 4, 11, '#5a3a00'); yy += 20;
+    if (p.missNames && p.missNames.length) { text(`少給 ${p.missNames.join('、')} 不收`, X + 8, yy, 11, '#c1121f', 'left', 'normal'); yy += 15; }
+    if (p.offer < p.price) { text(p.sat < 40 ? `品質差(滿意${p.sat}) → 客人只出` : '客人殺價', X + 8, yy, 12, '#c1121f'); text(`$${p.offer}`, X + 222, yy, 13, '#c1121f', 'right'); yy += 16; }
+    if (p.tip) { text(`小費(滿意度 ${p.sat})`, X + 8, yy, 12, '#1f7a3f'); text(`+${p.tip}`, X + 222, yy, 13, '#1f7a3f', 'right'); yy += 16; }
+    text(`應收 $${p.price}`, X + 8, 492, 20, '#c0392b');
     if (p.offer < p.price) {
-      text(`客人開價 $${p.offer}`, X + 4, 342, 18, '#ff9f80');
       const mid = Math.round((p.offer + p.price) / 2 / 5) * 5;
-      btn('payAccept', X, 362, 230, 48, `成交 $${p.offer}`, A.payAccept, { color: '#2a6f6a' });
-      btn('payMid', X, 416, 230, 48, `讓一半 $${mid}`, A.payMid, { enabled: !p.midTried, color: '#6b4226' });
-      btn('payInsist', X, 470, 230, 48, `堅持 $${p.price}(可能氣走)`, A.payInsist, { size: 16 });
-      btn('refuse', X, 524, 230, 48, '不賣了', A.refuse, { color: '#4a4a4a' });
-    } else btn('payFull', X, 350, 230, 80, `收錢 $${p.price}`, A.payFull, { color: '#2a6f6a', size: 26 });
+      btn('payAccept', X, 510, 230, 44, `成交 $${p.offer}`, A.payAccept, { color: '#2a6f6a' });
+      btn('payMid', X, 558, 230, 44, `讓一半 $${mid}`, A.payMid, { enabled: !p.midTried, color: '#6b4226' });
+      btn('payInsist', X, 606, 230, 44, `堅持 $${p.price}(可能氣走)`, A.payInsist, { size: 16 });
+      btn('refuse', X, 654, 230, 44, '不賣了', A.refuse, { color: '#4a4a4a' });
+    } else btn('payFull', X, 516, 230, 80, `收錢 $${p.price}${p.tip ? ` +小費${p.tip}` : ''}`, A.payFull, { color: '#2a6f6a', size: p.tip ? 20 : 26 });
   }
 }
 
-function drawStation() { drawLeft(); drawTank(); drawRight(); }
+function drawStation() { drawLeft(); drawTank(); drawRight(); drawHandAnim(); }
+// v42:客人把鐵盆遞過來(從櫃台客人手上飛到盆位)
+function drawHandAnim() {
+  const a = G.handAnim; if (!a) return;
+  const k = clamp(a.t / 0.6, 0, 1), e = 1 - Math.pow(1 - k, 3);
+  const sx = COUNTER_X - 30, sy = 200, tx = 14 + a.bi * 118 + 56, ty = 572;
+  const x = sx + (tx - sx) * e, y = sy + (ty - sy) * e - Math.sin(e * Math.PI) * 90, R = 34 + 12 * e;
+  ctx.save(); ctx.globalAlpha = k >= 1 ? clamp(1 - (a.t - 0.6) / 0.3, 0, 1) : 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(x + 4, y + 8, R, R * 0.8, 0, 0, 7); ctx.fill();
+  const g = ctx.createLinearGradient(x - R, y - R, x + R, y + R); g.addColorStop(0, '#f4f6f8'); g.addColorStop(0.5, '#aab1b9'); g.addColorStop(1, '#6e767e');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, R, R * 0.86, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#9aa1a9'; ctx.beginPath(); ctx.ellipse(x, y, R - 6, (R - 6) * 0.86, 0, 0, 7); ctx.fill();
+  a.keys.forEach((kk, j) => { const an = j / Math.max(1, a.keys.length) * 6.28, im = foodImg(kk, false), s2 = 22 + 6 * e;
+    const ix = x + Math.cos(an) * (a.keys.length > 1 ? R * 0.4 : 0), iy = y + Math.sin(an) * (a.keys.length > 1 ? R * 0.32 : 0);
+    if (im) { const sc = s2 / Math.max(im.width, im.height); ctx.drawImage(im, ix - im.width * sc / 2, iy - im.height * sc / 2, im.width * sc, im.height * sc); } });
+  ctx.restore();
+  if (k < 1) text('客人遞鐵盆過來', x, y - R - 12, 13, '#ffe8a3', 'center');
+}
 
 function bagBlock() {
   if (!G.plate.length) return '盤子是空的:先撈起炸好的料';
@@ -873,16 +955,18 @@ function bagBlock() {
 function hint() {
   if (G.phase !== 'open') return '';
   const c = G.counter;
-  if (!c) return G.t >= G.dayLen ? '收攤囉!' : '等客人上門…可以先炸一些熱門的料備著';
+  if (!c) return G.t >= G.dayLen ? '收攤囉!' : '等客人上門…客人會自己撿好一盆料交給你';
   if (G.pay) return G.pay.offer < G.pay.price ? '客人在殺價:成交、讓價或堅持原價?' : '收錢!';
   if (c.atCounter > 0.6 && shortItems(c).length) return '這單的料不夠了:道歉換單(沒小費、耐心-30%)或請客人離開';
   if (c.sus && c.atCounter > 1) return '這包自備料看起來怪怪的…要幫他炸,還是檢舉?';
+  if (!c.handed) return c.waitBowl ? '兩個鐵盆都有料:先按鐵盆(V)下鍋,才能接這位客人的盆' : '客人正把自己撿好的鐵盆遞給你…';
+  { const ml = mustLeft(c); if (ml.length && !G.plate.length) return `客人要你補:${orderText(ml)} → 點左邊橘框的料加進盆裡,再按鐵盆(V)下鍋`; }
   if (G.plate.length) return '點罐子灑胡椒鹽/辣粉、加九層塔,再按「裝袋」交給客人';
   const rd = G.fryer.findIndex((n, j) => n.length && G.baskets[j].inOil && netReady(n)), pr = G.bowls.findIndex(b => b.items.length);
   if (rd >= 0) return `${rd + 1} 號網整網熟了 → 按 ${rd + 1} 或點網子,整網撈到盤上(空白鍵撈全部熟網)`;
   if (pr >= 0) return `${pr + 1}號鐵盆撿好料了 → 點鐵盆(或按 V)倒進空網下鍋;右鍵鐵盆可退回`;
   if (fried().length) return '整網共用一個熟度條:綠色時點網子整網撈起';
-  return '點左邊食材(或按 A–H)把這單的料撿進鐵盆;按 B 換盆';
+  return '料都齊了 → 點鐵盆(V)下鍋';
 }
 
 function drawRail() {
@@ -918,10 +1002,16 @@ function drawRail() {
     text(`⏱${Math.max(0, Math.ceil(sec))}s`, x + w - 6, y + 12, 12, col, 'right');
     // 品項
     const short = shortItems(c);
-    if (c.type === 'regular' && !c.swapped) text('老樣子(看熟客筆記)', x + 6, y + 44, 12, '#2b1a0e');
-    else { const m = countBy(c.order.items); let xx = x + 6, yy = y + 44;
-      Object.keys(m).forEach(kk => { const t = `${ITEMS[kk].name}${m[kk] > 1 ? '×' + m[kk] : ''}`; ctx.font = `bold 12px ${FONT}`; const tw = ctx.measureText(t).width + 6;
-        if (xx + tw > x + w - 4) { xx = x + 6; yy += 15; } text(t, xx, yy, 12, short.includes(kk) ? '#d62828' : '#2b1a0e'); if (short.includes(kk)) { ctx.fillStyle = '#d62828'; ctx.fillRect(xx, yy, tw - 6, 1.5); } xx += tw; }); }
+    if (c.type === 'regular' && !c.swapped && !c.handed) text('老樣子(看熟客筆記)', x + 6, y + 44, 12, '#2b1a0e');
+    else { // v42:✓ = 客人已撿進盆;橘底 ＋ = 老闆要補(攤家料/臨時加點),補好變綠 ✓
+      const ml = atC ? countBy(mustLeft(c)) : {}, addC = countBy(c.handed ? c.need : (c.order.add || []).concat(c.order.items.filter(k => ITEMS[k].vendor && !(c.order.add || []).includes(k))));
+      const ents = []; const pc = countBy(c.order.items);
+      Object.keys(pc).forEach(kk => { const a = Math.min(pc[kk], addC[kk] || 0), sp = pc[kk] - a; if (sp) ents.push([kk, sp, 'self']); if (a) ents.push([kk, a, ml[kk] ? 'need' : c.handed && atC ? 'done' : 'need']); });
+      let xx = x + 6, yy = y + 42;
+      ents.forEach(([kk, n, st]) => { const t = `${st === 'need' ? '＋' : '✓'}${ITEMS[kk].name}${n > 1 ? '×' + n : ''}`; ctx.font = `bold 12px ${FONT}`; const tw = ctx.measureText(t).width + 8;
+        if (xx + tw > x + w - 4) { xx = x + 6; yy += 15; }
+        if (st === 'need') { ctx.fillStyle = '#ff9f1c'; rr(xx - 2, yy - 7, tw - 4, 14, 3); ctx.fill(); }
+        text(t, xx, yy, 12, short.includes(kk) ? '#d62828' : st === 'need' ? '#3a1600' : st === 'done' ? '#1f7a3f' : '#6c6c6c'); if (short.includes(kk)) { ctx.fillStyle = '#d62828'; ctx.fillRect(xx, yy, tw - 8, 1.5); } xx += tw; }); }
     const tags = (c.type === 'regular' ? '?' : `${c.order.spicy ? '辣' : '不辣'}・${c.order.basil ? '塔' : '無塔'}`) + (c.type === 'byo' ? '・代炸' : '');
     text(tags, x + 6, y + h - 14, 11, c.order.spicy && c.type !== 'regular' ? '#c1121f' : '#555');
     ctx.fillStyle = '#ddd'; ctx.fillRect(x + 70, y + h - 18, w - 76, 8); ctx.fillStyle = col; ctx.fillRect(x + 70, y + h - 18, (w - 76) * ratio, 8);
@@ -943,7 +1033,7 @@ function drawTitle(time) {
   ctx.fillStyle = 'rgba(10,5,3,0.78)'; rr(220, 170, 840, 520, 20); ctx.fill();
   ctx.shadowColor = '#ff5a36'; ctx.shadowBlur = 24; text('夜市攤位 · 鹽酥雞攤', 640, 215, 48, '#ffcf6b', 'center'); ctx.shadowBlur = 0;
   text(`本金 $${START_CASH} · 每晚收攤付攤租(第 1 晚 $${rentFor(1)},之後每晚 +$80)`, 640, 262, 18, '#ffd59a', 'center', 'normal');
-  const lines = ['① 開攤前「進貨」:錢花下去才有料,沒賣完的會隔夜不新鮮、甚至報廢', '② 客人點單會夾在上方的菜單夾;點食材撿進鐵盆,按鐵盆(V)倒進空網下鍋,熟度條到綠色點網子(1–6)整網撈起', '③ 胡椒鹽 Z、辣粉 X、九層塔 C → 裝袋 Enter → 收錢(小心殺價)', '④ 缺貨時可以道歉換單,或請客人離開;收攤後付攤租,付不出就欠債', '⑤ 賺到錢去「設備店」升級:更多方籃、冰箱、濾油機、霓虹招牌…', '連續兩晚付不出攤租 → 攤位被收回。能撐幾晚?'];
+  const lines = ['① 開攤前「進貨」:錢花下去才有料,沒賣完的會隔夜不新鮮、甚至報廢', '② 客人自己撿好一盆料交給你;雞排、鹽酥雞和「再加一份」要你補進盆,按鐵盆(V)下鍋,綠色時點網子撈起', '③ 胡椒鹽 Z、辣粉 X、九層塔 C → 裝袋 Enter → 收錢:每份料單價逐項加總(小心殺價)', '④ 缺貨時可以道歉換單,或請客人離開;收攤後付攤租,付不出就欠債', '⑤ 賺到錢去「設備店」升級:更多方籃、冰箱、濾油機、霓虹招牌…', '連續兩晚付不出攤租 → 攤位被收回。能撐幾晚?'];
   lines.forEach((l, i) => text(l, 270, 305 + i * 34, 17, i === 5 ? '#ffd166' : '#f3e6d0', 'left', 'normal'));
   const sv = loadSave(true);
   if (sv) { btn('continue', 400, 540, 230, 60, `繼續 第 ${sv.night} 晚`, A.cont, { size: 24 }); btn('newRun', 650, 540, 230, 60, '重新開始', A.newRun, { size: 22, color: '#6b4226' });
@@ -961,10 +1051,10 @@ function drawStock(time) {
   const cx = [60, 300, 390, 500, 600, 700, 900, 1080];
   hd.forEach((h, i) => text(h, cx[i], 136, 15, '#bba'));
   MENU.forEach((k, r) => {
-    const y = 172 + r * 64, I = ITEMS[k], st = STOCK[k], v = G.inv[k];
-    ctx.fillStyle = r % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.07)'; rr(46, y - 28, 1188, 58, 8); ctx.fill();
-    const fim = foodImg(k, false); if (fim) ctx.drawImage(fim, 56, y - 24, 50, 50);
-    text(I.name, 116, y, 20);
+    const y = 168 + r * 56, I = ITEMS[k], st = STOCK[k], v = G.inv[k];
+    ctx.fillStyle = r % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.07)'; rr(46, y - 25, 1188, 52, 8); ctx.fill();
+    const fim = foodImg(k, false); if (fim) ctx.drawImage(fim, 58, y - 22, 44, 44);
+    text(I.name, 116, y, 20); if (I.vendor) text('攤家', 116, y + 18, 11, '#ff9f80', 'left', 'normal');
     text(`${st.batch} 份`, cx[1], y, 17); text(`$${batchCost(k)}`, cx[2], y, 17, '#ffd166'); text(`$${I.price}`, cx[3], y, 17, '#b7e4c7');
     const days = has('fridge') ? 2 : st.days; text(days >= 2 ? `${days} 晚` : '當晚', cx[4], y, 17, days >= 2 ? '#b7e4c7' : '#ff9f80');
     text(`${v.fresh} / ${v.old}`, cx[5], y, 20, v.fresh + v.old ? '#fff' : '#ff6b6b');
@@ -975,7 +1065,7 @@ function drawStock(time) {
   });
   const est = G.schedule.length;
   const tot = MENU.reduce((a, k) => a + G.inv[k].fresh + G.inv[k].old, 0);
-  text(`預估今晚約 ${est} 位客人、平均每人 2 樣 ≈ 需要 ${est * 2} 份。目前備料 ${tot} 份。`, 60, 570, 17, '#f3e6d0', 'left', 'normal');
+  text(`預估今晚約 ${est} 位客人、平均每人約 3 樣(含雞排/鹽酥雞)≈ 需要 ${est * 3} 份。目前備料 ${tot} 份。`, 60, 570, 17, '#f3e6d0', 'left', 'normal');
   text(`今晚進貨已花 $${G.stats.buy}${has('bulk') ? '(批發價 -10%)' : ''}  ·  保存 1 晚的料(甜不辣、四季豆、魷魚)沒賣完收攤就報廢`, 60, 602, 15, '#bba', 'left', 'normal');
   btn('open', 980, 630, 240, 56, '開攤!(Enter)', A.open, { size: 24 });
 }
@@ -1058,6 +1148,6 @@ function frame(now) {
 newGame();
 if (params.has('autostart')) A.start();
 // 測試介面
-window.__game = { get state() { return G; }, get buttons() { return buttons.map(({ onClick, ...b }) => b); }, A, ITEMS, step: (dt) => { update(dt); render(performance.now() / 1000); } };
+window.__game = { mustLeft: () => mustLeft(G.counter), get state() { return G; }, get buttons() { return buttons.map(({ onClick, ...b }) => b); }, A, ITEMS, step: (dt) => { update(dt); render(performance.now() / 1000); } };
 requestAnimationFrame(frame);
 })();

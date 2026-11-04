@@ -1,17 +1,20 @@
 // 資料表:食材、客人類型、台詞(純資料)
 // 炸的秒數已依 3 分鐘營業時間壓縮(設計文件原始秒數 ÷ ~7)
+// v42:price = 每份售價(結帳逐項加總);cost = 進貨單份成本;vendor = 攤家自己顧的料(客人不能自己撿,一定要老闆補)
 const ITEMS = {
-  chicken:  { size: 'L', name: '雞排塊', cost: 18, price: 45, ideal: 170, time: 12, lo: 62, hi: 85, color: '#e8a54b' },
-  tempura:  { size: 'S', name: '甜不辣', cost: 7,  price: 18, ideal: 165, time: 8,  lo: 60, hi: 80, color: '#e9c46a' },
-  riceblood:{ size: 'S', name: '米血',   cost: 9,  price: 25, ideal: 160, time: 9,  lo: 55, hi: 78, color: '#5a3a3a' },
-  bean:     { size: 'S', name: '四季豆', cost: 6,  price: 18, ideal: 185, time: 5,  lo: 52, hi: 72, color: '#6aa84f' },
-  mushroom: { size: 'S', name: '杏鮑菇', cost: 11, price: 28, ideal: 170, time: 10, lo: 60, hi: 85, color: '#d9c7a0' },
-  squid:    { size: 'S', name: '魷魚圈', cost: 14, price: 32, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
-  byo:      { size: 'S', name: '自備料', cost: 0,  price: 20, ideal: 170, time: 8,  lo: 58, hi: 80, color: '#9c8f6a' },
+  chicken:  { size: 'L', name: '雞排',   cost: 30, price: 75, ideal: 170, time: 12, lo: 62, hi: 85, color: '#e8a54b', vendor: true },
+  saltchicken:{ size: 'S', name: '鹽酥雞', cost: 22, price: 60, ideal: 175, time: 9, lo: 60, hi: 82, color: '#d08a3a', vendor: true },
+  tempura:  { size: 'S', name: '甜不辣', cost: 11, price: 30, ideal: 165, time: 8,  lo: 60, hi: 80, color: '#e9c46a' },
+  riceblood:{ size: 'S', name: '米血',   cost: 11, price: 30, ideal: 160, time: 9,  lo: 55, hi: 78, color: '#5a3a3a' },
+  bean:     { size: 'S', name: '四季豆', cost: 13, price: 35, ideal: 185, time: 5,  lo: 52, hi: 72, color: '#6aa84f' },
+  mushroom: { size: 'S', name: '杏鮑菇', cost: 15, price: 40, ideal: 170, time: 10, lo: 60, hi: 85, color: '#d9c7a0' },
+  squid:    { size: 'S', name: '魷魚圈', cost: 19, price: 50, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
+  byo:      { size: 'S', name: '自備料', cost: 0,  price: 25, ideal: 170, time: 8,  lo: 58, hi: 80, color: '#9c8f6a' },
 };
 // v40 網子:L(雞排)一塊一個大網(2×2);S 小料先「備料」放進同一個小網(2×1,最多 SMALL_CAP 份),整網一次下鍋、共用一個計時、整網一次撈
 const SMALL_CAP = 4;
-const MENU = ['chicken', 'tempura', 'riceblood', 'bean', 'mushroom', 'squid'];
+const MENU = ['chicken', 'saltchicken', 'tempura', 'riceblood', 'bean', 'mushroom', 'squid'];
+const SELF_MENU = MENU.filter(k => !ITEMS[k].vendor); // v42:客人自己撿進鐵盆的料
 
 const TEMPS = [
   { key: 'low',  name: '低溫', target: 145 },
@@ -26,13 +29,14 @@ const rentFor = n => 300 + 80 * (n - 1);            // 第1晚 $300,每晚 +$80(
 // 進貨:batch = 每批份數;days = 保存晚數(含進貨當晚)。單份成本 = ITEMS.cost
 const STOCK = {
   chicken:   { batch: 5, days: 2 },
+  saltchicken:{ batch: 6, days: 2 },
   tempura:   { batch: 8, days: 1 },
   riceblood: { batch: 6, days: 2 },
   bean:      { batch: 8, days: 1 },
   mushroom:  { batch: 5, days: 2 },
   squid:     { batch: 4, days: 1 },
 };
-const MAX_STOCK = 40;                                // 每種食材庫存上限(份)
+const MAX_STOCK = 48;                                // 每種食材庫存上限(份)
 const UPGRADES = [
   { id: 'bigNet',  name: '加大網(第 3 個 2×2)', price: 600, desc: '油槽右上多一個大網:雞排不用排隊' },
   { id: 'smallNet',name: '加小網(第 3 個混炸網)', price: 300, desc: '油槽右下多一個小網(2×1,備好 4 份小料整網一起炸)' },
@@ -65,7 +69,7 @@ const CTYPES = {
 };
 
 const LINES = {
-  greet: ['老闆,我要這些!', '欸老闆,幫我炸一下~', '這些,麻煩你!', '我要這個這個還有這個。'],
+  greet: ['老闆,我撿好了,幫我炸~', '欸老闆,這盆麻煩你!', '這些,麻煩你!', '我夾好了,炸一下~'],
   regular: ['老闆~老樣子!', '嘿嘿,一樣喔!'],
   aunt: ['少年仔,便宜一點啦!', '算便宜一點,我常來欸!'],
   drunk: ['嗝…老闆…給我來個…那個…', '老、老闆…炸一下…嗝'],
