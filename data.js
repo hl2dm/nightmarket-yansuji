@@ -2,19 +2,33 @@
 // 炸的秒數已依 3 分鐘營業時間壓縮(設計文件原始秒數 ÷ ~7)
 // v42:price = 每份售價(結帳逐項加總);cost = 進貨單份成本;vendor = 攤家自己顧的料(客人不能自己撿,一定要老闆補)
 const ITEMS = {
-  chicken:  { size: 'L', name: '雞排', en: 'Cutlet',   cost: 30, price: 75, ideal: 170, time: 12, lo: 62, hi: 85, color: '#e8a54b', vendor: true },
-  saltchicken:{ size: 'S', name: '鹽酥雞', en: 'Popcorn Chkn', cost: 22, price: 60, ideal: 175, time: 9, lo: 60, hi: 82, color: '#d08a3a', vendor: true },
-  tempura:  { size: 'S', name: '甜不辣', en: 'Tempura', cost: 11, price: 30, ideal: 165, time: 8,  lo: 60, hi: 80, color: '#e9c46a' },
-  riceblood:{ size: 'S', name: '米血', en: 'Rice Cake',   cost: 11, price: 30, ideal: 160, time: 9,  lo: 55, hi: 78, color: '#5a3a3a' },
-  bean:     { size: 'S', name: '四季豆', en: 'Green Bean', cost: 13, price: 35, ideal: 185, time: 5,  lo: 52, hi: 72, color: '#6aa84f' },
-  mushroom: { size: 'S', name: '杏鮑菇', en: 'Mushroom', cost: 15, price: 40, ideal: 170, time: 10, lo: 60, hi: 85, color: '#d9c7a0' },
-  squid:    { size: 'S', name: '魷魚圈', en: 'Squid Ring', cost: 19, price: 50, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
-  byo:      { size: 'S', name: '自備料', en: 'BYO', cost: 0,  price: 25, ideal: 170, time: 8,  lo: 58, hi: 80, color: '#9c8f6a' },
+  chicken:  { size: 'L', cat: 'meat', solo: true, night: 1, name: '雞排', en: 'Cutlet',   cost: 30, price: 75, ideal: 170, time: 12, lo: 62, hi: 85, color: '#e8a54b', vendor: true },
+  saltchicken:{ size: 'L', cat: 'meat', night: 1, name: '鹽酥雞', en: 'Popcorn Chkn', cost: 22, price: 60, ideal: 175, time: 9, lo: 60, hi: 82, color: '#d08a3a', vendor: true },
+  tempura:  { size: 'S', cat: 'veg', night: 1, name: '甜不辣', en: 'Tempura', cost: 11, price: 30, ideal: 165, time: 8,  lo: 60, hi: 80, color: '#e9c46a' },
+  riceblood:{ size: 'S', cat: 'veg', night: 1, name: '米血', en: 'Rice Cake',   cost: 11, price: 30, ideal: 160, time: 9,  lo: 55, hi: 78, color: '#5a3a3a' },
+  bean:     { size: 'S', cat: 'veg', night: 1, name: '四季豆', en: 'Green Bean', cost: 13, price: 35, ideal: 185, time: 5,  lo: 52, hi: 72, color: '#6aa84f' },
+  mushroom: { size: 'S', cat: 'veg', night: 1, name: '杏鮑菇', en: 'Mushroom', cost: 15, price: 40, ideal: 170, time: 10, lo: 60, hi: 85, color: '#d9c7a0' },
+  squid:    { size: 'L', cat: 'meat', night: 1, name: '魷魚圈', en: 'Squid Ring', cost: 19, price: 50, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
+  // v44 新料(night = 第幾晚解鎖)
+  chickenskin:{ size: 'L', cat: 'meat', night: 2, name: '雞皮', en: 'Chkn Skin', cost: 14, price: 40, ideal: 175, time: 7, lo: 58, hi: 80, color: '#e0b070' },
+  porkskewer:{ size: 'L', cat: 'meat', night: 3, name: '豬肉串', en: 'Pork Skwr', cost: 18, price: 45, ideal: 175, time: 8, lo: 60, hi: 82, color: '#b0603a' },
+  squidball:{ size: 'L', cat: 'meat', night: 4, name: '花枝丸', en: 'Squid Ball', cost: 12, price: 35, ideal: 170, time: 6, lo: 56, hi: 80, color: '#e6c48a' },
+  tofu:     { size: 'S', cat: 'veg', night: 2, name: '百頁豆腐', en: 'Tofu', cost: 10, price: 30, ideal: 170, time: 6, lo: 56, hi: 80, color: '#f0dca0' },
+  sweetpotato:{ size: 'S', cat: 'veg', night: 2, name: '地瓜', en: 'Swt Potato', cost: 10, price: 30, ideal: 165, time: 9, lo: 60, hi: 82, color: '#e89a3a' },
+  babycorn: { size: 'S', cat: 'veg', night: 3, name: '玉米筍', en: 'Baby Corn', cost: 10, price: 30, ideal: 180, time: 5, lo: 54, hi: 76, color: '#f2d66a' },
+  greenpepper:{ size: 'S', cat: 'veg', night: 3, name: '青椒', en: 'Grn Pepper', cost: 9, price: 25, ideal: 185, time: 4, lo: 52, hi: 74, color: '#4a9a3a' },
+  silverbun:{ size: 'S', cat: 'veg', night: 4, name: '銀絲卷', en: 'Silver Bun', cost: 12, price: 35, ideal: 165, time: 5, lo: 55, hi: 78, color: '#f5efe0' },
+  byo:      { size: 'S', cat: 'veg', night: 1, name: '自備料', en: 'BYO', cost: 0,  price: 25, ideal: 170, time: 8,  lo: 58, hi: 80, color: '#9c8f6a' },
 };
 // v40 網子:L(雞排)一塊一個大網(2×2);S 小料先「備料」放進同一個小網(2×1,最多 SMALL_CAP 份),整網一次下鍋、共用一個計時、整網一次撈
 const SMALL_CAP = 4;
-const MENU = ['chicken', 'saltchicken', 'tempura', 'riceblood', 'bean', 'mushroom', 'squid'];
-const SELF_MENU = MENU.filter(k => !ITEMS[k].vendor); // v42:客人自己撿進鐵盆的料
+// v44 標準:肉類(cat:'meat')一律進大網;雞排 solo 一塊一網,其他肉每大網最多 MEAT_CAP 份混炸;非肉進小網
+const MEAT_CAP = 4;
+const isMeat = k => ITEMS[k] && ITEMS[k].cat === 'meat';
+const ALL_MENU = ['chicken', 'saltchicken', 'squid', 'chickenskin', 'porkskewer', 'squidball', 'tempura', 'riceblood', 'bean', 'mushroom', 'tofu', 'sweetpotato', 'babycorn', 'greenpepper', 'silverbun'];
+const MENU = [], SELF_MENU = []; // 依當晚解鎖重建(refreshMenu)
+function refreshMenu(night) { MENU.splice(0, MENU.length, ...ALL_MENU.filter(k => (ITEMS[k].night || 1) <= night)); SELF_MENU.splice(0, SELF_MENU.length, ...MENU.filter(k => !ITEMS[k].vendor)); }
+refreshMenu(1); // v42:客人自己撿進鐵盆的料
 
 const TEMPS = [
   { key: 'low',  name: '低溫', target: 145 },
@@ -35,10 +49,18 @@ const STOCK = {
   bean:      { batch: 8, days: 1 },
   mushroom:  { batch: 5, days: 2 },
   squid:     { batch: 4, days: 1 },
+  chickenskin:{ batch: 4, days: 1 },
+  porkskewer:{ batch: 4, days: 2 },
+  squidball: { batch: 4, days: 2 },
+  tofu:      { batch: 4, days: 2 },
+  sweetpotato:{ batch: 4, days: 2 },
+  babycorn:  { batch: 4, days: 1 },
+  greenpepper:{ batch: 4, days: 1 },
+  silverbun: { batch: 4, days: 2 },
 };
 const MAX_STOCK = 48;                                // 每種食材庫存上限(份)
 const UPGRADES = [
-  { id: 'bigNet',  name: '加大網(第 3 個 2×2)', price: 600, desc: '油槽右上多一個大網:雞排不用排隊' },
+  { id: 'bigNet',  name: '加大網(第 3 個 2×2)', price: 450, desc: '油槽右上多一個大網:肉類(雞排/鹽酥雞/魷魚…)不用排隊' },
   { id: 'smallNet',name: '加小網(第 3 個混炸網)', price: 300, desc: '油槽右下多一個小網(2×1,備好 4 份小料整網一起炸)' },
   { id: 'fridge',  name: '保鮮冰箱',         price: 400, desc: '當晚料也能留一晚,隔夜料不扣滿意度' },
   { id: 'filter',  name: '濾油機',           price: 350, desc: '油老化速度 -40%,少換油、少被稽查' },

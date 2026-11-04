@@ -37,7 +37,7 @@ loadImg('tankTop', 'art/fryer_top.jpg'); loadImg('basketTop', 'art/basket_top.pn
 const ART_FILE = { chicken: 'cutlet', saltchicken: 'chicken' };
 const RAW_FILE = { chicken: 'cutlet_raw2', mushroom: 'mushroom_raw2', tempura: 'tempura_raw2' };
 const FRIED_FILE = { mushroom: 'art/food_mushroom.png' }; // 杏鮑菇炸好用切塊圖,和鹽酥雞塊區隔
-['chicken','saltchicken','tempura','riceblood','bean','mushroom','squid','byo'].forEach(k => { const f = ART_FILE[k] || k; loadImg('raw_' + k, `assets/food_${RAW_FILE[k] || f + '_raw'}.png`); loadImg('fr_' + k, FRIED_FILE[k] || `assets/food_${f}_fried.png`); });
+[...ALL_MENU, 'byo'].forEach(k => { const f = ART_FILE[k] || k; loadImg('raw_' + k, `assets/food_${RAW_FILE[k] || f + '_raw'}.png`); loadImg('fr_' + k, FRIED_FILE[k] || `assets/food_${f}_fried.png`); });
 loadImg('burnt', 'assets/food_burnt.png'); loadImg('bigNet', 'assets/basket_big.png'); loadImg('smallNet', 'assets/basket_small.png');
 loadImg('tank2', 'assets/fryer_tank.png'); loadImg('uiCash', 'assets/ui_cash.png'); loadImg('uiRep', 'assets/ui_rep.png');
 loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bowl_chili.png'); loadImg('bowl_basil', 'assets/food_basil_fried.png'); loadImg('scissorsP', 'assets/scissors.png'); loadImg('bagP', 'assets/food_bag.png'); loadImg('cashTray', 'assets/cash_tray.png');
@@ -68,6 +68,22 @@ function foodIcon(k, cx, cy, s, fried = true) {
   const im = foodImg(k, fried); if (!im) { ctx.fillStyle = ITEMS[k].color; ctx.beginPath(); ctx.arc(cx, cy, s / 2.4, 0, 7); ctx.fill(); return; }
   const sc = s / Math.max(im.width, im.height); ctx.drawImage(im, cx - im.width * sc / 2, cy - im.height * sc / 2, im.width * sc, im.height * sc);
 }
+// v44:類別徽章(語言無關)— 肉=橘底雞腿,非肉=綠底葉子
+function catBadge(cx, cy, r, meat) {
+  ctx.save(); ctx.fillStyle = meat ? '#e07a1f' : '#3a9a4a'; ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1, r * 0.18);
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); ctx.stroke();
+  if (meat) { // 雞腿:肉球 + 骨頭
+    ctx.fillStyle = '#8a3f12'; ctx.beginPath(); ctx.ellipse(cx - r * 0.18, cy - r * 0.15, r * 0.48, r * 0.38, -0.7, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#fff6e6'; ctx.lineWidth = r * 0.22; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(cx + r * 0.1, cy + r * 0.1); ctx.lineTo(cx + r * 0.45, cy + r * 0.45); ctx.stroke();
+    ctx.fillStyle = '#fff6e6'; ctx.beginPath(); ctx.arc(cx + r * 0.55, cy + r * 0.38, r * 0.14, 0, 7); ctx.arc(cx + r * 0.38, cy + r * 0.56, r * 0.14, 0, 7); ctx.fill();
+  } else { // 葉子
+    ctx.fillStyle = '#d9ffd0'; ctx.beginPath(); ctx.ellipse(cx, cy, r * 0.62, r * 0.32, -0.7, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2a7a35'; ctx.lineWidth = Math.max(1, r * 0.1); ctx.beginPath(); ctx.moveTo(cx - r * 0.45, cy + r * 0.45); ctx.lineTo(cx + r * 0.4, cy - r * 0.4); ctx.stroke();
+  }
+  ctx.restore();
+}
+function bigNetMini(cx, cy) { ctx.strokeStyle = '#e07a1f'; ctx.lineWidth = 2; rr(cx - 11, cy - 11, 22, 22, 4); ctx.stroke(); ctx.beginPath(); ctx.moveTo(cx, cy - 11); ctx.lineTo(cx, cy + 11); ctx.moveTo(cx - 11, cy); ctx.lineTo(cx + 11, cy); ctx.stroke(); }
+function smallNetMini(cx, cy) { ctx.strokeStyle = '#3a9a4a'; ctx.lineWidth = 2; rr(cx - 11, cy - 6, 22, 12, 3); ctx.stroke(); }
 function checkMark(cx, cy, r, col = '#21b36b') {
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, r * 0.32); ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(cx - r * 0.45, cy); ctx.lineTo(cx - r * 0.1, cy + r * 0.38); ctx.lineTo(cx + r * 0.5, cy - r * 0.38); ctx.stroke(); ctx.lineCap = 'butt';
@@ -139,14 +155,14 @@ function has(u) { return G.upgrades.includes(u); }
 function newGame() {
   G = {
     phase: 'title', night: 1, cash: START_CASH, debt: 0, debtStrikes: 0, rep: 60, upgrades: [],
-    inv: Object.fromEntries(MENU.map(k => [k, { fresh: 0, old: 0 }])),
+    inv: Object.fromEntries(ALL_MENU.map(k => [k, { fresh: 0, old: 0 }])),
     regularOrder: { items: ['chicken', 'tempura', 'bean'], spicy: true, basil: true },
     best: 0, gameOver: '', boughtTonight: 0, hasSave: !!loadSave(true),
     popups: [], particles: [], shake: 0,
   };
   newNight();
 }
-function newNight() {
+function newNight() { refreshMenu(G.night);
   Object.assign(G, {
     t: 0, dayLen: 180, grace: 45, repStart: G.rep, cashStart: G.cash, debtStart: G.debt, endBanner: false, pendingSick: false,
     queue: [], counter: null, walkers: [], baskets: basketLayout(), fryer: null, lastLine: null, fullFlash: 0, plate: [],
@@ -168,7 +184,7 @@ function saveGame() {
 }
 function loadSave(peek) {
   try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!d || peek) return d;
-    Object.assign(G, { night: d.night, cash: d.cash, debt: d.debt, debtStrikes: d.debtStrikes, rep: d.rep, upgrades: (d.upgrades || []).map(u => u === 'baskets' ? 'bigNet' : u), inv: Object.assign(Object.fromEntries(MENU.map(k => [k, { fresh: 0, old: 0 }])), d.inv), regularOrder: d.regularOrder, best: d.best || 0 });
+    Object.assign(G, { night: d.night, cash: d.cash, debt: d.debt, debtStrikes: d.debtStrikes, rep: d.rep, upgrades: (d.upgrades || []).map(u => u === 'baskets' ? 'bigNet' : u), inv: Object.assign(Object.fromEntries(ALL_MENU.map(k => [k, { fresh: 0, old: 0 }])), d.inv), regularOrder: d.regularOrder, best: d.best || 0 });
     newNight(); G.phase = d.phase === 'shop' ? 'shop' : 'stock'; return d; } catch (e) { return null; }
 }
 // ---------- 油槽格子(俯視 6×3) ----------
@@ -229,7 +245,7 @@ function makeOrder(type) {
   // v42:客人自己從展示櫃撿 n 樣進鐵盆;雞排/鹽酥雞是攤家顧的(一定要老闆補);偶爾口頭「再加一份」
   const n = type === 'student' ? 1 + (rng() < 0.4 ? 1 : 0) : type === 'aunt' ? 3 + (rng() < 0.5 ? 1 : 0) : 2 + Math.floor(rng() * 2);
   const items = [], add = [];
-  const pickSelf = () => { let k = pick(SELF_MENU); if (stockOf(k) <= (countBy(items)[k] || 0)) { const ok = SELF_MENU.filter(m => stockOf(m) > (countBy(items)[m] || 0)); if (ok.length && rng() < 0.7) k = pick(ok); } return k; };
+  const pickSelf = () => { let k = pick(SELF_MENU); if (stockOf(k) <= (countBy(items)[k] || 0)) { const ok = SELF_MENU.filter(m => stockOf(m) > (countBy(items)[m] || 0)); if (ok.length && rng() < 0.9) k = pick(ok); } return k; };
   for (let i = 0; i < n; i++) items.push(pickSelf());
   const vp = type === 'student' ? 0.45 : 0.3;
   if (rng() < vp) { items.push('chicken'); add.push('chicken'); }
@@ -312,7 +328,7 @@ const A = {
     if (!B.items.length) B.cid = cid;
     B.items.push({ key: k, old }); G.bowlSel = bi; sfx('click');
   },
-  // v41:鐵盆下鍋 — 雞排各進一個大網,小料每 SMALL_CAP 份進一個小網;放不下的留在盆裡
+  // v44:鐵盆下鍋 — 自動分類:肉類進大網(雞排一塊一網、其他肉 4 份一網),非肉每 SMALL_CAP 份進一個小網;放不下的留在盆裡
   pour(bi) {
     if (bi === undefined) { bi = G.bowls[G.bowlSel].items.length ? G.bowlSel : G.bowls.findIndex(b => b.items.length); if (bi < 0) return; }
     const B = G.bowls[bi]; if (!B.items.length) { G.bowlSel = bi; return; }
@@ -320,7 +336,11 @@ const A = {
     if (G.oilChange > 0) { popup('換油中,等一下', 640, 560, '#ff6b6b'); return; }
     const keep = [], L = B.items.filter(it => ITEMS[it.key].size === 'L'), S = B.items.filter(it => ITEMS[it.key].size !== 'L'), used = [];
     const mk = it => ({ key: it.key, d: 0, cold: 0, age: 0, old: it.old, cid: B.cid, cue: 0 });
-    L.forEach(it => { const i = freeBasket(it.key); if (i < 0) { keep.push(it); return; } G.fryer[i] = [mk(it)]; used.push(i); });
+    // v44:雞排(solo)一塊一個大網;其他肉類每 MEAT_CAP 份共用一個大網
+    const freeL = () => G.baskets.findIndex((b, j) => !b.locked && !b.inOil && !G.fryer[j].length && b.s === 'L');
+    L.filter(it => ITEMS[it.key].solo).forEach(it => { const i = freeL(); if (i < 0) { keep.push(it); return; } G.fryer[i] = [mk(it)]; used.push(i); });
+    const M = L.filter(it => !ITEMS[it.key].solo);
+    while (M.length) { const i = freeL(); if (i < 0) { keep.push(...M); break; } G.fryer[i] = M.splice(0, MEAT_CAP).map((it, j) => Object.assign(mk(it), { slot: j })); used.push(i); }
     while (S.length) { const i = G.baskets.findIndex((b, j) => !b.locked && !b.inOil && !G.fryer[j].length && b.s === 'S'); if (i < 0) { keep.push(...S); break; }
       G.fryer[i] = S.splice(0, SMALL_CAP).map((it, j) => Object.assign(mk(it), { slot: j })); used.push(i); }
     if (!used.length) { G.fullFlash = 0.6; popup('沒有空網!先撈起熟的網', 640, 420, '#ff6b6b'); return; }
@@ -547,7 +567,7 @@ function endDay() {
   if (G.pendingSick) { changeRep(-6); addLog('有客人吃了來路不明的自備料,上網爆料!口碑 -6'); }
   // 隔夜耗損:保存 1 晚的剩料報廢;保存 2 晚的變「隔夜料」,原本的隔夜料報廢。冰箱:全部多留一晚。
   const spoiled = [];
-  MENU.forEach(k => { const v = G.inv[k], days = has('fridge') ? 2 : STOCK[k].days;
+  ALL_MENU.forEach(k => { const v = G.inv[k], days = has('fridge') ? 2 : STOCK[k].days;
     let lose = v.old; if (days >= 2) { v.old = v.fresh; } else { lose += v.fresh; v.old = 0; } v.fresh = 0;
     if (lose > 0) { G.stats.spoil += Math.round(lose * unitCost(k)); spoiled.push(`${ITEMS[k].name}×${lose}`); } });
   G.spoiledList = spoiled;
@@ -599,7 +619,7 @@ window.addEventListener('keydown', e => {
   if (G.phase === 'stock' && k === 'enter') { A.open(); return; }
   if (G.phase !== 'open') return;
   const m = { a: () => A.drop(MENU[0]), s: () => A.drop(MENU[1]), d: () => A.drop(MENU[2]), f: () => A.drop(MENU[3]), g: () => A.drop(MENU[4]), h: () => A.drop(MENU[5]),
-    j: () => A.drop(MENU[6]),
+    j: () => A.drop(MENU[6]), k: () => MENU[7] && A.drop(MENU[7]), l: () => MENU[8] && A.drop(MENU[8]),
     '1': () => A.tapNet(0), '2': () => A.tapNet(1), '3': () => A.tapNet(2), '4': () => A.tapNet(3), '5': () => A.tapNet(4), '6': () => A.tapNet(5), v: () => A.pour(), b: () => { G.bowlSel = 1 - G.bowlSel; }, o: A.changeOil, q: () => A.setTemp('low'), w: () => A.setTemp('mid'), e: () => A.setTemp('high'), ' ': A.liftAll, z: () => A.toggle('salt'), x: () => A.toggle('spicy'), c: () => A.toggle('basil'), enter: A.bag };
   if (m[k]) { m[k](); e.preventDefault(); }
 });
@@ -811,35 +831,39 @@ function countEnts(keys, st) { const m = countBy(keys); return Object.keys(m).ma
 function drawLeft() {
   panel(8, 266, 244, 446, '展示櫃 — 客人自己撿;橘框=老闆補');
   const keys = [...MENU], mlk = G.counter && !G.pay ? mustLeft(G.counter) : [];
+  // v44:肉類區(橘底、大格)在上;非肉(綠底、小格)在下
+  ctx.fillStyle = 'rgba(224,122,31,0.22)'; rr(12, 283, 236, 149, 10); ctx.fill(); ctx.strokeStyle = '#e07a1f'; ctx.lineWidth = 2; rr(12, 283, 236, 149, 10); ctx.stroke();
+  ctx.fillStyle = 'rgba(58,154,74,0.18)'; rr(12, 435, 236, 129, 10); ctx.fill(); ctx.strokeStyle = '#3a9a4a'; rr(12, 435, 236, 129, 10); ctx.stroke();
   keys.forEach((k, i) => {
-    const bx = 16 + (i % 2) * 118, by = 290 + Math.floor(i / 2) * 56, I = ITEMS[k];
-    const q = k === 'byo' ? 1 : stockOf(k), big = I.size === 'L';
+    const R = ITEM_RECT(k); if (!R) return; const { x: bx, y: by, w: tw, h: th } = R, I = ITEMS[k], meat = isMeat(k);
+    const q = k === 'byo' ? 1 : stockOf(k);
     const full = G.bowls.every(b => b.items.length >= BOWL_CAP);
-    btn('item_' + k, bx, by, 112, 52, '', () => A.drop(k), { color: '#6b4226', enabled: q > 0 && !full });
-    const fim = foodImg(k, false);
-    if (fim) { ctx.save(); if (k === 'byo' && !IMG.raw_byo) ctx.filter = 'hue-rotate(60deg) saturate(0.6)'; ctx.drawImage(fim, bx + 3, by + 6, 40, 40); ctx.restore(); }
-    if (mlk.includes(k) && Math.sin(performance.now() / 120) > -0.3) { ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 3.5; rr(bx - 1, by - 1, 114, 54, 9); ctx.stroke(); }
-    if (I.vendor) { plusMark(bx + 8, by + 8, 7); }
-    text(NM(k), bx + 46, by + 12, LANG === 'en' ? 11 : 15);
-    ctx.fillStyle = big ? '#e07a1f' : '#3b7fb8'; rr(bx + 90, by + 4, 18, 14, 4); ctx.fill(); text(big ? 'L' : 'S', bx + 99, by + 11, 10, '#fff', 'center');
-    text(`$${I.price}`, bx + 46, by + 29, 15, '#ffd166'); text('ASDFGHJ'[i], bx + 100, by + 29, 11, '#bba', 'center', 'normal');
+    btn('item_' + k, bx, by, tw, th, '', () => A.drop(k), { color: meat ? '#7a3c12' : '#2f5a34', enabled: q > 0 && !full });
+    const fim = foodImg(k, false), is = meat ? 40 : 26;
+    if (fim) { const sc = is / Math.max(fim.width, fim.height); ctx.drawImage(fim, bx + 3 + (is - fim.width * sc) / 2, by + 2 + (is - fim.height * sc) / 2, fim.width * sc, fim.height * sc); }
+    if (mlk.includes(k) && Math.sin(performance.now() / 120) > -0.3) { ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 3.5; rr(bx - 1, by - 1, tw + 2, th + 2, 9); ctx.stroke(); }
+    if (I.vendor) plusMark(bx + 6, by + 6, 6);
+    const hk = 'ASDFGHJKL'[i];
+    if (meat) { catBadge(bx + tw - 10, by + 10, 8, true); text(NM(k), bx + 46, by + 11, LANG === 'en' ? 11 : 14); text(`$${I.price}`, bx + 46, by + 26, 12, '#ffd166'); if (hk) text(hk, bx + tw - 10, by + 26, 10, '#ddb', 'center', 'normal'); }
+    else { catBadge(bx + 26, by + 6, 5, false); text(NM(k), bx + 31, by + 9, LANG === 'en' ? 8 : 10); text(`$${I.price}`, bx + 31, by + 21, 10, '#ffd166'); if (hk) text(hk, bx + tw - 6, by + 21, 8, '#ddb', 'center', 'normal'); }
     if (k !== 'byo') { const v = G.inv[k] || { old: 0 }; const lab = q <= 0 ? '✗ 0' : `📦${q}${v.old ? ` (${L('夜', 'old')}${v.old})` : ''}`;
-      ctx.fillStyle = q <= 0 ? '#d62828' : q <= 3 ? '#e9a400' : 'rgba(0,0,0,0.45)'; rr(bx + 46, by + 39, 62, 11, 4); ctx.fill(); text(lab, bx + 77, by + 44.5, 10, '#fff', 'center'); }
+      const lw = meat ? 60 : tw - 6, lx = meat ? bx + 46 : bx + 3, ly = by + th - 10;
+      ctx.fillStyle = q <= 0 ? '#d62828' : q <= 3 ? '#e9a400' : 'rgba(0,0,0,0.45)'; rr(lx, ly, lw, 9, 3); ctx.fill(); text(lab, lx + lw / 2, ly + 4.5, 8, '#fff', 'center'); }
   });
   // v41:鐵盆(備料盆)— 料先撿進盆,再按盆下鍋
   const cid = G.counter && !G.pay ? G.counter.id : -1;
-  G.bowls.forEach((B, bi) => drawBowl(bi, B, 14 + bi * 118, 514, 112, 112, cid));
+  G.bowls.forEach((B, bi) => drawBowl(bi, B, 14 + bi * 118, 566, 112, 78, cid));
   // 油溫/油況(壓縮成兩排)
-  const ty = 642, old = G.oilUse > OIL_LIMIT;
+  const ty = 654, old = G.oilUse > OIL_LIMIT;
   text(`🌡 ${Math.round(G.temp)}°C`, 16, ty, 15, G.temp > 182 ? '#ff8f6b' : G.temp < 155 ? '#9ad1ff' : '#ffd166');
   text(`🛢 ${old ? L('老油!', 'OLD!') : L('新鮮', 'fresh')} ${Math.round(G.oilUse)}/${OIL_LIMIT}${has('filter') ? ' F' : ''}`, 120, ty, 12, old ? '#ff6b6b' : '#b7e4c7', 'left', 'normal');
   TEMPS.forEach((tp, i) => btn('temp_' + tp.key, 14 + i * 58, ty + 10, 54, 28, `${L(tp.name, ['Low', 'Mid', 'High'][i])}${'QWE'[i]}`, () => A.setTemp(tp.key), { on: G.tempKey === tp.key, color: '#2a6f6a', size: 12 }));
   btn('oil', 190, ty + 10, 56, 28, `換油O`, A.changeOil, { enabled: !fried().length && G.oilChange <= 0, color: '#6b4226', size: 12 });
-  text(`🛢 $${OIL_CHANGE_COST} ${L('鍋要空', '(empty fryer)')}`, 16, ty + 54, 11, '#a89a86', 'left', 'normal');
+  text(`🛢 $${OIL_CHANGE_COST} ${L('鍋要空', '(empty fryer)')}`, 16, ty + 50, 11, '#a89a86', 'left', 'normal');
 }
 // v41:不鏽鋼鐵盆(俯視,canvas 畫)
 function drawBowl(bi, B, x, y, w, h, cid) {
-  const n = B.items.length, sel = G.bowlSel === bi, cx = x + w / 2, cy = y + 58, R = 46;
+  const n = B.items.length, sel = G.bowlSel === bi, cx = x + w / 2, cy = y + h / 2 + 2, R = h >= 100 ? 46 : 34, sk = R / 46;
   buttons.push({ id: 'bowl_' + bi, x, y, w, h, enabled: true, clickable: true, onClick: () => A.pour(bi), onRight: () => A.clearBowl(bi) });
   ctx.save();
   ctx.fillStyle = sel ? 'rgba(244,162,97,0.22)' : 'rgba(0,0,0,0.25)'; rr(x, y, w, h, 10); ctx.fill();
@@ -850,10 +874,10 @@ function drawBowl(bi, B, x, y, w, h, cid) {
   g = ctx.createRadialGradient(cx - 10, cy - 12, 4, cx, cy, R - 6); g.addColorStop(0, '#eef1f4'); g.addColorStop(0.6, '#a9b0b8'); g.addColorStop(1, '#5d656d');
   ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, cy, R - 7, (R - 7) * 0.86, 0, 0, 7); ctx.fill(); // 盆內
   ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(cx, cy, R - 7, (R - 7) * 0.86, 0, Math.PI * 1.05, Math.PI * 1.6); ctx.stroke();
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(cx, cy + 2, R - 20, (R - 20) * 0.86, 0, 0, 7); ctx.stroke(); // 盆底圈
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(cx, cy + 2, R * 0.56, R * 0.48, 0, 0, 7); ctx.stroke(); // 盆底圈
   // 盆裡的料(交盆動畫飛行中先不畫)
-  if (!(G.handAnim && G.handAnim.bi === bi && G.handAnim.t < 0.6)) B.items.forEach((it, j) => { const a = j / Math.max(1, n) * Math.PI * 2 + bi, rr2 = n === 1 ? 0 : n <= 3 ? 14 : 20;
-    const ix = cx + Math.cos(a) * rr2, iy = cy + Math.sin(a) * rr2 * 0.8, s = ITEMS[it.key].size === 'L' ? 40 : 30;
+  if (!(G.handAnim && G.handAnim.bi === bi && G.handAnim.t < 0.6)) B.items.forEach((it, j) => { const a = j / Math.max(1, n) * Math.PI * 2 + bi, rr2 = (n === 1 ? 0 : n <= 3 ? 14 : 20) * sk;
+    const ix = cx + Math.cos(a) * rr2, iy = cy + Math.sin(a) * rr2 * 0.8, s = (ITEMS[it.key].size === 'L' ? 40 : 30) * sk;
     const im = IMG['raw_' + it.key] || foodImg(it.key, false);
     if (im) { const sc = s / Math.max(im.width, im.height); ctx.drawImage(im, ix - im.width * sc / 2, iy - im.height * sc / 2, im.width * sc, im.height * sc); }
     else { ctx.fillStyle = ITEMS[it.key].color; ctx.beginPath(); ctx.arc(ix, iy, s / 3, 0, 7); ctx.fill(); } });
@@ -898,8 +922,8 @@ function drawTank() {
   { const st = [['bowl'], ['food', 'chicken', 'need'], ['arrow'], ['net'], ['arrow'], ['check'], ['text', '⬆'], ['arrow'], ['jar', 'salt'], ['arrow'], ['bag'], ['arrow'], ['coin']];
     drawHint({ t: '', seq: st, tgt: [] }, 282, 672); }
   const cnt = s => G.baskets.filter((b, j) => b.s === s && !b.locked && !G.fryer[j].length).length, bowlN = bowlItems().length;
-  foodIcon('chicken', 292, 693, 18); arrowSmall(304, 693, 14); text(L('大', 'L'), 324, 693, 12, '#ffd59a'); foodIcon('tempura', 352, 693, 16); text(`×${SMALL_CAP}`, 362, 693, 11, '#ffd59a'); arrowSmall(384, 693, 14); text(L('小', 'S'), 404, 693, 12, '#ffd59a');
-  text(`${L('空網', 'Free')}  L ${cnt('L')} · S ${cnt('S')}`, 500, 693, 15, G.fullFlash > 0 ? '#ff6b6b' : '#b7e4c7', 'left');
+  catBadge(286, 693, 8, true); arrowSmall(298, 693, 12); bigNetMini(318, 693); catBadge(352, 693, 8, false); arrowSmall(364, 693, 12); smallNetMini(384, 693);
+  text(`${L('空網', 'Free')}`, 410, 693, 13, '#b7e4c7', 'left'); catBadge(452, 693, 7, true); text(`${cnt('L')}`, 462, 693, 15, G.fullFlash > 0 ? '#ff6b6b' : '#b7e4c7', 'left'); catBadge(484, 693, 7, false); text(`${cnt('S')}`, 494, 693, 15, G.fullFlash > 0 ? '#ff6b6b' : '#b7e4c7', 'left');
   if (bowlN && !G.fryer.some((n, j) => n.length && G.baskets[j].inOil && netReady(n))) btn('pour', 810, 662, 194, 40, `鐵盆下鍋(V)`, () => A.pour(), { enabled: G.oilChange <= 0, size: 16 });
   else btn('liftAll', 810, 662, 194, 40, '撈熟的(空白鍵)', A.liftAll, { enabled: G.fryer.some((n, j) => n.length && G.baskets[j].inOil && netReady(n)), size: 16 });
 }
@@ -919,21 +943,21 @@ function drawSlot(i, net, now, cid) {
   if (netI) { ctx.save(); ctx.globalAlpha = on ? 0.8 : 0.95; ctx.drawImage(netI, x, y, w, h); ctx.restore(); }
   else { ctx.strokeStyle = '#c9ced4'; ctx.lineWidth = 3; rr(x + 3, y + 3, w - 6, h - 6, 8); ctx.stroke(); }
   const bs = big ? 30 : 22; ctx.fillStyle = '#ffd166'; rr(x + 6, y + 6, bs, bs, 6); ctx.fill(); text(String(i + 1), x + 6 + bs / 2, y + 6 + bs / 2, big ? 20 : 15, '#2b1a0e', 'center');
-  ctx.fillStyle = big ? 'rgba(224,122,31,0.9)' : 'rgba(59,127,184,0.9)'; rr(x + bs + 10, y + 7, big ? 46 : 74, 20, 5); ctx.fill();
-  text(big ? L('大網', 'L') : `${L('小網', 'S')} ${net.length}/${SMALL_CAP}`, x + bs + 10 + (big ? 23 : 37), y + 17, 12, '#fff', 'center');
+  ctx.fillStyle = big ? 'rgba(224,122,31,0.9)' : 'rgba(59,127,184,0.9)'; rr(x + bs + 10, y + 7, big ? 60 : 74, 20, 5); ctx.fill();
+  text(big ? (net.length > 1 ? `${net.length}/${MEAT_CAP}` : '') : `${net.length}/${SMALL_CAP}`, x + bs + 10 + (big ? 40 : 46), y + 17, 12, '#fff', 'center'); catBadge(x + bs + 10 + 12, y + 17, 9, big);
   if (!on) {
     ctx.fillStyle = 'rgba(0,0,0,0.5)'; rr(x + w / 2 - 70, y + h / 2 - 14, 140, 28, 8); ctx.fill();
-    if (big) { ctx.save(); ctx.globalAlpha = 0.45; foodIcon('chicken', x + w / 2, y + h / 2, 40, false); ctx.restore(); } else { ctx.save(); ctx.globalAlpha = 0.45; ['tempura', 'bean', 'squid'].forEach((k, q) => foodIcon(k, x + w / 2 - 34 + q * 34, y + h / 2, 26, false)); ctx.restore(); }
+    if (big) { ctx.save(); ctx.globalAlpha = 0.5; foodIcon('chicken', x + w / 2 - 22, y + h / 2, 36, false); foodIcon('saltchicken', x + w / 2 + 22, y + h / 2, 30, false); ctx.restore(); catBadge(x + w - 22, y + h - 22, 14, true); } else catBadge(x + w - 18, y + h - 18, 11, false); if (big) {} else { ctx.save(); ctx.globalAlpha = 0.45; ['tempura', 'bean', 'squid'].forEach((k, q) => foodIcon(k, x + w / 2 - 34 + q * 34, y + h / 2, 26, false)); ctx.restore(); }
     return;
   }
   const inOil = b.inOil;
   buttons.push({ id: 'lift_' + i, x, y, w, h, enabled: true, onClick: () => A.tapNet(i) });
   if (net.every(it => it.cid === cid)) { ctx.fillStyle = '#4cc9f0'; rr(x + w - 50, y + 7, 42, 20, 5); ctx.fill(); text(L('這單', 'NOW'), x + w - 29, y + 17, 12, '#06283d', 'center'); }
   // 料的圖(小網排一排,不再各自標熟度)
-  const n = big ? 1 : SMALL_CAP, cw = (w - 12) / n, P = b.p || 0;
+  const multi = big && net.length > 1, n = big ? (multi ? 2 : 1) : SMALL_CAP, cw = (w - 12) / n, P = b.p || 0;
   net.forEach((it, j) => {
     const I = ITEMS[it.key];
-    const s = big ? 118 : 38, cx = x + 6 + cw * j + cw / 2, cy = y + (big ? 96 : 50);
+    const s = multi ? 62 : big ? 118 : 38, cx = x + 6 + cw * (multi ? j % 2 : j) + cw / 2, cy = y + (multi ? 62 + Math.floor(j / 2) * 62 : big ? 96 : 50);
     const rawI = IMG['raw_' + it.key], frI = IMG['fr_' + it.key], fim = IMG['f_' + (IMG_ALIAS[it.key] || it.key)], k = clamp(it.d / 100, 0, 1);
     const fit = (im, a, flt) => { if (!im) return; const sc = s / Math.max(im.width, im.height); ctx.save(); ctx.globalAlpha = a; if (flt) ctx.filter = flt; ctx.drawImage(im, cx - im.width * sc / 2, cy - im.height * sc / 2, im.width * sc, im.height * sc); ctx.restore(); };
     if (rawI && frI) { if (it.d >= 100) fit(IMG.burnt || frI, 1, IMG.burnt ? '' : 'brightness(0.2)');
@@ -1049,7 +1073,7 @@ function drawStation() { G._hint = null; drawLeft(); drawTank(); drawRight(); dr
 function drawHandAnim() {
   const a = G.handAnim; if (!a) return;
   const k = clamp(a.t / 0.6, 0, 1), e = 1 - Math.pow(1 - k, 3);
-  const sx = COUNTER_X - 30, sy = 200, tx = 14 + a.bi * 118 + 56, ty = 572;
+  const sx = COUNTER_X - 30, sy = 200, tx = 14 + a.bi * 118 + 56, ty = 606;
   const x = sx + (tx - sx) * e, y = sy + (ty - sy) * e - Math.sin(e * Math.PI) * 90, R = 34 + 12 * e;
   ctx.save(); ctx.globalAlpha = k >= 1 ? clamp(1 - (a.t - 0.6) / 0.3, 0, 1) : 1;
   ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(x + 4, y + 8, R, R * 0.8, 0, 0, 7); ctx.fill();
@@ -1070,8 +1094,12 @@ function bagBlock() {
   return '';
 }
 // v43:提示 = 圖示序列(seq)+ 短字 + 畫面上的彈跳箭頭(tgt)
-const ITEM_POS = k => { const i = MENU.indexOf(k); return [16 + (i % 2) * 118 + 56, 290 + Math.floor(i / 2) * 56]; };
-const BOWL_POS = bi => [14 + bi * 118 + 56, 514];
+// v44:肉類 2 欄大格(112×60),非肉 3 欄小格(74×68)
+function ITEM_RECT(k) { const meat = MENU.filter(isMeat), veg = MENU.filter(m => !isMeat(m));
+  let i = meat.indexOf(k); if (i >= 0) return { x: 18 + (i % 2) * 114, y: 287 + Math.floor(i / 2) * 48, w: 110, h: 45 };
+  i = veg.indexOf(k); if (i >= 0) return { x: 17 + (i % 3) * 76, y: 439 + Math.floor(i / 3) * 42, w: 74, h: 39 }; return null; }
+const ITEM_POS = k => { const r = ITEM_RECT(k) || { x: 16, y: 290, w: 0, h: 0 }; return [r.x + r.w / 2, r.y + r.h / 2]; };
+const BOWL_POS = bi => [14 + bi * 118 + 56, 566];
 const NET_POS = i => { const r = slotRect(i); return [r.x + r.w / 2, r.y + 6]; };
 function hint() {
   if (G.phase !== 'open') return null;
@@ -1185,9 +1213,22 @@ function drawStock(time) {
   infoBar(96);
   const hd = ['食材', '一批', '進價/批', '售價/份', '保存', '庫存(新鮮/隔夜)', '', '今晚進了'];
   const cx = [60, 300, 390, 500, 600, 700, 900, 1080];
-  hd.forEach((h, i) => text(h, cx[i], 136, 15, '#bba'));
+  if (MENU.length <= 7) hd.forEach((h, i) => text(h, cx[i], 136, 15, '#bba'));
+  else text(L('v44 新料逐晚解鎖 · 橘=肉(大網) 綠=非肉(小網)', 'New items unlock nightly · orange=meat (big net) green=veg (small net)'), 60, 136, 15, '#bba', 'left', 'normal');
   MENU.forEach((k, r) => {
-    const y = 168 + r * 56, I = ITEMS[k], st = STOCK[k], v = G.inv[k];
+    const I = ITEMS[k], st = STOCK[k], v = G.inv[k], meat = isMeat(k);
+    if (MENU.length > 7) { // 兩欄精簡列
+      const col = r < Math.ceil(MENU.length / 2) ? 0 : 1, rr2 = col ? r - Math.ceil(MENU.length / 2) : r, X = 46 + col * 600, y = 166 + rr2 * 50;
+      ctx.fillStyle = meat ? 'rgba(224,122,31,0.16)' : 'rgba(58,154,74,0.14)'; rr(X, y - 23, 588, 46, 8); ctx.fill();
+      const fim = foodImg(k, false); if (fim) ctx.drawImage(fim, X + 6, y - 20, 40, 40); catBadge(X + 44, y - 14, 7, meat);
+      text(NM(k), X + 56, y - 7, LANG === 'en' ? 14 : 17); text(`$${batchCost(k)}/${st.batch} · ${L('售', 'sell')} $${I.price}`, X + 56, y + 12, 12, '#ffd166', 'left', 'normal');
+      const days = has('fridge') ? 2 : st.days; text(days >= 2 ? `${days} 晚` : '當晚', X + 250, y, 14, days >= 2 ? '#b7e4c7' : '#ff9f80');
+      text(`${v.fresh} / ${v.old}`, X + 320, y, 17, v.fresh + v.old ? '#fff' : '#ff6b6b');
+      btn('unbuy_' + k, X + 390, y - 18, 50, 36, '−', () => A.buy(k, -1), { enabled: !!G.buyLog[k], color: '#6b4226', size: 20 });
+      btn('buy_' + k, X + 446, y - 18, 80, 36, `+${st.batch}`, () => A.buy(k, 1), { enabled: G.cash >= batchCost(k), color: '#2a6f6a', size: 16 });
+      text(G.buyLog[k] ? `${G.buyLog[k]}` : '—', X + 556, y, 16, '#ffd166', 'center');
+      return; }
+    const y = 168 + r * 56;
     ctx.fillStyle = r % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.07)'; rr(46, y - 25, 1188, 52, 8); ctx.fill();
     const fim = foodImg(k, false); if (fim) ctx.drawImage(fim, 58, y - 22, 44, 44);
     text(I.name, 116, y, 20); if (I.vendor) text('攤家', 116, y + 18, 11, '#ff9f80', 'left', 'normal');
@@ -1285,6 +1326,6 @@ function frame(now) {
 newGame();
 if (params.has('autostart')) A.start();
 // 測試介面
-window.__game = { mustLeft: () => mustLeft(G.counter), get state() { return G; }, get buttons() { return buttons.map(({ onClick, ...b }) => b); }, A, ITEMS, step: (dt) => { update(dt); render(performance.now() / 1000); } };
+window.__game = { mustLeft: () => mustLeft(G.counter), get state() { return G; }, get buttons() { return buttons.map(({ onClick, ...b }) => b); }, A, ITEMS, SELF_MENU, MENU, step: (dt) => { update(dt); render(performance.now() / 1000); } };
 requestAnimationFrame(frame);
 })();

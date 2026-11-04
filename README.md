@@ -88,3 +88,10 @@
 - 提示改成圖示流程 + 跳動箭頭指向目標。
 - 右上 中/EN 切換(localStorage `yansuji_lang` 或 `?lang=en`)。無音樂/提示音。
 - 參考 Claude 建議(claude_icon_ui_v43.md):圖示晶片+數量徽章、必加料脈動、圖示收據、語言切換放音量鈕旁。
+
+## v44 — 肉類用大網標準 + 8 種新料
+- data.js:每個食材加 `cat`(meat/veg)與 `night`(解鎖晚)。肉類(雞排、鹽酥雞、魷魚圈、雞皮、豬肉串、花枝丸)一律進大網;雞排 `solo` 一塊一網,其他肉每大網最多 `MEAT_CAP=4` 份混炸;非肉每小網 4 份。鐵盆下鍋自動分類。
+- 新料:雞皮/百頁豆腐/地瓜(第 2 晚)、豬肉串/玉米筍/青椒(第 3 晚)、花枝丸/銀絲卷(第 4 晚)。
+- 介面:展示櫃上方橘色肉類區(大格+雞腿徽章),下方綠色非肉區(小格+葉子徽章);大網/小網、教學列同樣用徽章。進貨頁超過 7 種改兩欄。鐵盆縮小為 78px 高。
+- 加大網價格 600→450。熱鍵 A–L 對應前 9 種。
+- 佔位圖(之後用 Grok Imagine 重畫):food_porkskewer / squidball / babycorn / greenpepper / silverbun _raw/_fried.png(_tools/placeholder_food.py 產生)。
