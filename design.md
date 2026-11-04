@@ -444,3 +444,6 @@ yansuji/
 - 移除網內每份料各自的熟度條/小字標籤。下鍋時才計油耗與降溫。
 - 測試:`node multinight.mjs 6 7 4` → errors: [];截圖 screens/27_prep_basket.png、27_basket_frying.png、27_basket_ready.png、27_lifted_plate.png(_tools/shots_v40.mjs)。
 
+
+## v41 鐵盆(備料盆)
+流程:撿料進鐵盆 → 按鐵盆下鍋(自動分大/小網,共用計時)→ 熟了點網撈。鐵盆在油槽外(左欄食材下方),canvas 畫的俯視不鏽鋼盆;左欄油溫/換油壓成兩排。G.bowls[{items,cid}], G.bowlSel, A.drop/pour/clearBowl。
