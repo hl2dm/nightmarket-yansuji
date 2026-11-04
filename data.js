@@ -2,14 +2,14 @@
 // 炸的秒數已依 3 分鐘營業時間壓縮(設計文件原始秒數 ÷ ~7)
 // v42:price = 每份售價(結帳逐項加總);cost = 進貨單份成本;vendor = 攤家自己顧的料(客人不能自己撿,一定要老闆補)
 const ITEMS = {
-  chicken:  { size: 'L', name: '雞排',   cost: 30, price: 75, ideal: 170, time: 12, lo: 62, hi: 85, color: '#e8a54b', vendor: true },
-  saltchicken:{ size: 'S', name: '鹽酥雞', cost: 22, price: 60, ideal: 175, time: 9, lo: 60, hi: 82, color: '#d08a3a', vendor: true },
-  tempura:  { size: 'S', name: '甜不辣', cost: 11, price: 30, ideal: 165, time: 8,  lo: 60, hi: 80, color: '#e9c46a' },
-  riceblood:{ size: 'S', name: '米血',   cost: 11, price: 30, ideal: 160, time: 9,  lo: 55, hi: 78, color: '#5a3a3a' },
-  bean:     { size: 'S', name: '四季豆', cost: 13, price: 35, ideal: 185, time: 5,  lo: 52, hi: 72, color: '#6aa84f' },
-  mushroom: { size: 'S', name: '杏鮑菇', cost: 15, price: 40, ideal: 170, time: 10, lo: 60, hi: 85, color: '#d9c7a0' },
-  squid:    { size: 'S', name: '魷魚圈', cost: 19, price: 50, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
-  byo:      { size: 'S', name: '自備料', cost: 0,  price: 25, ideal: 170, time: 8,  lo: 58, hi: 80, color: '#9c8f6a' },
+  chicken:  { size: 'L', name: '雞排', en: 'Cutlet',   cost: 30, price: 75, ideal: 170, time: 12, lo: 62, hi: 85, color: '#e8a54b', vendor: true },
+  saltchicken:{ size: 'S', name: '鹽酥雞', en: 'Popcorn Chkn', cost: 22, price: 60, ideal: 175, time: 9, lo: 60, hi: 82, color: '#d08a3a', vendor: true },
+  tempura:  { size: 'S', name: '甜不辣', en: 'Tempura', cost: 11, price: 30, ideal: 165, time: 8,  lo: 60, hi: 80, color: '#e9c46a' },
+  riceblood:{ size: 'S', name: '米血', en: 'Rice Cake',   cost: 11, price: 30, ideal: 160, time: 9,  lo: 55, hi: 78, color: '#5a3a3a' },
+  bean:     { size: 'S', name: '四季豆', en: 'Green Bean', cost: 13, price: 35, ideal: 185, time: 5,  lo: 52, hi: 72, color: '#6aa84f' },
+  mushroom: { size: 'S', name: '杏鮑菇', en: 'Mushroom', cost: 15, price: 40, ideal: 170, time: 10, lo: 60, hi: 85, color: '#d9c7a0' },
+  squid:    { size: 'S', name: '魷魚圈', en: 'Squid Ring', cost: 19, price: 50, ideal: 185, time: 6,  lo: 55, hi: 68, color: '#f1e3c6' },
+  byo:      { size: 'S', name: '自備料', en: 'BYO', cost: 0,  price: 25, ideal: 170, time: 8,  lo: 58, hi: 80, color: '#9c8f6a' },
 };
 // v40 網子:L(雞排)一塊一個大網(2×2);S 小料先「備料」放進同一個小網(2×1,最多 SMALL_CAP 份),整網一次下鍋、共用一個計時、整網一次撈
 const SMALL_CAP = 4;
@@ -59,13 +59,13 @@ const OIL_LIMIT = 24; // 超過即老油
 
 // patience 秒;haggle = 殺價機率;offer = 開價比例
 const CTYPES = {
-  normal:    { label: '路人',     body: '#4f7cac', patience: 40, haggle: 0.2,  offer: [0.85, 0.9] },
-  student:   { label: '趕時間學生', body: '#3d9970', patience: 26, haggle: 0.0,  offer: [1, 1] },
-  regular:   { label: '熟客',     body: '#2e8b57', patience: 48, haggle: 0.0,  offer: [1, 1] },
-  aunt:      { label: '殺價阿姨', body: '#b5527a', patience: 55, haggle: 1.0,  offer: [0.68, 0.78] },
-  drunk:     { label: '酒醉阿伯', body: '#8a6d3b', patience: 55, haggle: 0.3,  offer: [0.8, 0.9] },
-  inspector: { label: '路人?',    body: '#6c757d', patience: 60, haggle: 0.0,  offer: [1, 1] },
-  byo:       { label: '自備食材客', body: '#7b5ea7', patience: 45, haggle: 0.0,  offer: [1, 1] },
+  normal:    { label: '路人', en: 'Passer-by',     body: '#4f7cac', patience: 40, haggle: 0.2,  offer: [0.85, 0.9] },
+  student:   { label: '趕時間學生', en: 'Student', body: '#3d9970', patience: 26, haggle: 0.0,  offer: [1, 1] },
+  regular:   { label: '熟客', en: 'Regular',     body: '#2e8b57', patience: 48, haggle: 0.0,  offer: [1, 1] },
+  aunt:      { label: '殺價阿姨', en: 'Haggler', body: '#b5527a', patience: 55, haggle: 1.0,  offer: [0.68, 0.78] },
+  drunk:     { label: '酒醉阿伯', en: 'Drunk', body: '#8a6d3b', patience: 55, haggle: 0.3,  offer: [0.8, 0.9] },
+  inspector: { label: '路人?', en: 'Passer-by?',    body: '#6c757d', patience: 60, haggle: 0.0,  offer: [1, 1] },
+  byo:       { label: '自備食材客', en: 'BYO guest', body: '#7b5ea7', patience: 45, haggle: 0.0,  offer: [1, 1] },
 };
 
 const LINES = {

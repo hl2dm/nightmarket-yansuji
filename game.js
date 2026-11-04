@@ -33,8 +33,11 @@ loadImg('bg', 'art/bg_stall.jpg');
 loadImg('tankTop', 'art/fryer_top.jpg'); loadImg('basketTop', 'art/basket_top.png');
 // v3.2:Grok 像素素材(assets/,由 _tools/cutout.py 去綠幕產生);沒載到就退回上面的舊圖
 // v42:雞排改用 cutlet(整片)圖;鹽酥雞沿用原本一塊塊的雞肉圖
+// v43:Grok 原圖 food_cutlet_raw 與 food_mushroom_raw 生成成同一張紫色石頭狀圖(雞排生料=杏鮑菇生料),改用 *_raw2(由炸好圖重新上色)
 const ART_FILE = { chicken: 'cutlet', saltchicken: 'chicken' };
-['chicken','saltchicken','tempura','riceblood','bean','mushroom','squid','byo'].forEach(k => { const f = ART_FILE[k] || k; loadImg('raw_' + k, `assets/food_${f}_raw.png`); loadImg('fr_' + k, `assets/food_${f}_fried.png`); });
+const RAW_FILE = { chicken: 'cutlet_raw2', mushroom: 'mushroom_raw2', tempura: 'tempura_raw2' };
+const FRIED_FILE = { mushroom: 'art/food_mushroom.png' }; // 杏鮑菇炸好用切塊圖,和鹽酥雞塊區隔
+['chicken','saltchicken','tempura','riceblood','bean','mushroom','squid','byo'].forEach(k => { const f = ART_FILE[k] || k; loadImg('raw_' + k, `assets/food_${RAW_FILE[k] || f + '_raw'}.png`); loadImg('fr_' + k, FRIED_FILE[k] || `assets/food_${f}_fried.png`); });
 loadImg('burnt', 'assets/food_burnt.png'); loadImg('bigNet', 'assets/basket_big.png'); loadImg('smallNet', 'assets/basket_small.png');
 loadImg('tank2', 'assets/fryer_tank.png'); loadImg('uiCash', 'assets/ui_cash.png'); loadImg('uiRep', 'assets/ui_rep.png');
 loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bowl_chili.png'); loadImg('bowl_basil', 'assets/food_basil_fried.png'); loadImg('scissorsP', 'assets/scissors.png'); loadImg('bagP', 'assets/food_bag.png'); loadImg('cashTray', 'assets/cash_tray.png');
@@ -43,6 +46,91 @@ loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bo
 const sfx = (n, ...a) => { const S = window.SFX; if (S && S[n]) S[n](...a); };
 const foodImg = (k, fried = true) => IMG[(fried ? 'fr_' : 'raw_') + k] || IMG['f_' + (IMG_ALIAS[k] || k)];
 const IMG_ALIAS = { byo: 'mushroom', saltchicken: 'chicken' };
+// ---------- v43:語言切換 + 圖示化 UI ----------
+let LANG = (() => { try { return params.get('lang') || localStorage.getItem('yansuji_lang') || 'zh'; } catch (e) { return 'zh'; } })();
+const L = (zh, en) => LANG === 'en' ? en : zh;
+const NM = k => LANG === 'en' ? (ITEMS[k].en || ITEMS[k].name) : ITEMS[k].name;
+const CL = t => LANG === 'en' ? (CTYPES[t].en || CTYPES[t].label) : CTYPES[t].label;
+function setLang(l) { LANG = l; try { localStorage.setItem('yansuji_lang', l); } catch (e) {} }
+// 靜態字串字典(text()/btn() 會自動查)
+const EN = {
+  '倒掉': 'Dump', '不賣了': 'Refuse', '收銀': 'Register', '起鍋盤 — 調味、裝袋': 'Plate — season & bag', '收據(逐項加總)': 'Receipt',
+  '🙇 道歉換單': '🙇 Swap order', '請他離開(-2)': 'Send away (-2)', '🚨 檢舉': '🚨 Report', '換油中…': 'Changing oil…',
+  '🛍 裝袋 (Enter)': '🛍 Bag (Enter)', '🛍 裝袋(等客人)': '🛍 Bag (no guest)', '🛍 裝袋(盤子空)': '🛍 Bag (plate empty)', '🛍 裝袋(客人還沒到)': '🛍 Bag (guest coming)',
+  '撈熟的(空白鍵)': 'Lift ready (Space)', '鐵盆下鍋(V)': 'Pour bowl (V)', '換油O': 'Oil O', '低溫Q': 'Low Q', '中溫W': 'Mid W', '高溫E': 'High E',
+  '— 收攤時間,服務完排隊的客人 —': '— Closing time: serve the queue —', '🔒 可升級': '🔒 Upgrade',
+  '展示櫃 — 客人自己撿;橘框=老闆補': 'Showcase  (orange = you add)',
+};
+const tr = s => (LANG === 'en' && typeof s === 'string' && EN[s]) || s;
+const pulse = (sp = 5) => 0.5 + 0.5 * Math.sin(performance.now() / 1000 * sp);
+// 畫一個食材圖示(預設炸好的樣子),等比縮放置中
+function foodIcon(k, cx, cy, s, fried = true) {
+  const im = foodImg(k, fried); if (!im) { ctx.fillStyle = ITEMS[k].color; ctx.beginPath(); ctx.arc(cx, cy, s / 2.4, 0, 7); ctx.fill(); return; }
+  const sc = s / Math.max(im.width, im.height); ctx.drawImage(im, cx - im.width * sc / 2, cy - im.height * sc / 2, im.width * sc, im.height * sc);
+}
+function checkMark(cx, cy, r, col = '#21b36b') {
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, r * 0.32); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx - r * 0.45, cy); ctx.lineTo(cx - r * 0.1, cy + r * 0.38); ctx.lineTo(cx + r * 0.5, cy - r * 0.38); ctx.stroke(); ctx.lineCap = 'butt';
+}
+function crossMark(cx, cy, r, col = '#d62828') {
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, r * 0.3); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx - r * 0.4, cy - r * 0.4); ctx.lineTo(cx + r * 0.4, cy + r * 0.4); ctx.moveTo(cx + r * 0.4, cy - r * 0.4); ctx.lineTo(cx - r * 0.4, cy + r * 0.4); ctx.stroke(); ctx.lineCap = 'butt';
+}
+function plusMark(cx, cy, r) {
+  ctx.fillStyle = '#ff7b00'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, r * 0.32); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx - r * 0.5, cy); ctx.lineTo(cx + r * 0.5, cy); ctx.moveTo(cx, cy - r * 0.5); ctx.lineTo(cx, cy + r * 0.5); ctx.stroke(); ctx.lineCap = 'butt';
+}
+function flameIcon(cx, cy, s, big = false) {
+  const f = 1 + 0.08 * Math.sin(performance.now() / 70);
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(f, f);
+  [[big ? '#7a1010' : '#e8742a', 1], ['#ffb703', 0.62], ['#fff3b0', 0.3]].forEach(([c, k]) => { const h = s * k, w = s * k * 0.62; ctx.fillStyle = c; ctx.beginPath();
+    ctx.moveTo(0, -h / 2); ctx.bezierCurveTo(w * 0.9, -h * 0.1, w * 0.8, h * 0.5, 0, h / 2); ctx.bezierCurveTo(-w * 0.8, h * 0.5, -w * 0.9, -h * 0.1, 0, -h / 2); ctx.fill(); });
+  ctx.restore();
+}
+function rawIcon(cx, cy, s) { // 生:藍色水滴/冰晶
+  ctx.save(); ctx.translate(cx, cy); ctx.strokeStyle = '#cfe6ff'; ctx.lineWidth = Math.max(1.5, s * 0.1); ctx.lineCap = 'round';
+  for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * s / 2, Math.sin(a) * s / 2); ctx.lineTo(-Math.cos(a) * s / 2, -Math.sin(a) * s / 2); ctx.stroke(); }
+  ctx.restore();
+}
+// 小撒粉罐圖示;state: true=要, false=不要(畫斜線)
+const JAR = { salt: ['#e9dfc8', '#6b5a44'], spicy: ['#c8321f', '#7a1a10'], basil: ['#3f8f3a', '#1f4f1c'] };
+function jarIcon(id, cx, cy, s, want = true) {
+  const [body, cap] = JAR[id], k = s / 40;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(k, k); if (!want) ctx.globalAlpha = 0.55;
+  ctx.fillStyle = cap; rr(-10, -20, 20, 9, 3); ctx.fill(); ctx.fillStyle = '#d9dde2'; rr(-11, -12, 22, 4, 1); ctx.fill();
+  ctx.fillStyle = 'rgba(230,240,245,0.5)'; rr(-11, -8, 22, 28, 4); ctx.fill(); ctx.fillStyle = body; rr(-10, -1, 20, 20, 3); ctx.fill();
+  if (id === 'spicy') { ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(-4, 4); ctx.quadraticCurveTo(6, 6, 2, 16); ctx.quadraticCurveTo(-2, 10, -4, 4); ctx.fill(); }
+  if (id === 'basil') { ctx.fillStyle = '#8fd17a'; ctx.beginPath(); ctx.ellipse(0, 9, 4, 7, 0.5, 0, 7); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  if (!want) { ctx.strokeStyle = '#d62828'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 19, 0, 7); ctx.moveTo(-13, -13); ctx.lineTo(13, 13); ctx.stroke(); }
+  ctx.restore();
+}
+// 食材圖示 + 數量 + 狀態(self 一般 / need 要你補:橘色脈動 / done 打勾 / short 缺貨)
+function iconBadge(k, n, cx, cy, s, st = 'self') {
+  if (st === 'need') { const p = pulse(7); ctx.fillStyle = `rgba(255,140,0,${0.35 + 0.35 * p})`; ctx.beginPath(); ctx.arc(cx, cy, s * 0.62 + p * 2, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#ff7b00'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(cx, cy, s * 0.62 + p * 2, 0, 7); ctx.stroke(); }
+  ctx.save(); if (st === 'short') ctx.globalAlpha = 0.4; foodIcon(k, cx, cy, s); ctx.restore();
+  const r = Math.max(5, s * 0.2);
+  if (st === 'need') plusMark(cx - s * 0.42, cy - s * 0.42, r);
+  if (st === 'done') checkMark(cx + s * 0.42, cy - s * 0.42, r);
+  if (st === 'short') crossMark(cx + s * 0.42, cy - s * 0.42, r);
+  if (n > 1) { const fs = Math.max(10, s * 0.36); ctx.font = `bold ${fs}px ${FONT}`; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.lineWidth = 3; ctx.strokeStyle = '#1a0d05';
+    ctx.strokeText('×' + n, cx + s * 0.6, cy + s * 0.55); ctx.fillStyle = '#fff'; ctx.fillText('×' + n, cx + s * 0.6, cy + s * 0.55); }
+}
+// 一排圖示;ents = [[key, n, state]],回傳寬度
+function iconRow(ents, x, cy, s, gap = 4, maxW = 9999) {
+  let xx = x; ents.forEach(([k, n, st]) => { const w = s + (n > 1 ? s * 0.35 : 0); if (xx + w - x > maxW) return; iconBadge(k, n, xx + s / 2, cy, s, st); xx += w + gap; }); return xx - x;
+}
+// 教學箭頭(上下彈跳)
+function arrowTo(x, y, dir = 'down', col = '#ffd166') {
+  const b = Math.sin(performance.now() / 160) * 6; ctx.save(); ctx.translate(x, y); ctx.rotate({ down: 0, up: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }[dir]); ctx.translate(0, -18 + b);
+  ctx.fillStyle = col; ctx.strokeStyle = '#2b1a0e'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-8, -22); ctx.lineTo(8, -22); ctx.lineTo(8, -4); ctx.lineTo(16, -4); ctx.lineTo(0, 14); ctx.lineTo(-16, -4); ctx.lineTo(-8, -4); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+}
+function bowlIcon(cx, cy, s) { const g = ctx.createRadialGradient(cx - s * 0.1, cy - s * 0.1, 2, cx, cy, s / 2); g.addColorStop(0, '#eef1f4'); g.addColorStop(1, '#6e767e'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, cy, s / 2, s * 0.43, 0, 0, 7); ctx.fill(); }
+function netIcon(cx, cy, s) { ctx.strokeStyle = '#c9ced4'; ctx.lineWidth = 2; rr(cx - s / 2, cy - s * 0.35, s, s * 0.7, 4); ctx.stroke(); for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(cx - s / 2 + s * i / 4, cy - s * 0.35); ctx.lineTo(cx - s / 2 + s * i / 4, cy + s * 0.35); ctx.stroke(); } ctx.fillStyle = 'rgba(201,138,40,0.6)'; rr(cx - s / 2, cy, s, s * 0.35, 4); ctx.fill(); }
+function bagIcon(cx, cy, s) { if (IMG.bagP) { const im = IMG.bagP, sc = s / Math.max(im.width, im.height); ctx.drawImage(im, cx - im.width * sc / 2, cy - im.height * sc / 2, im.width * sc, im.height * sc); } else text('🛍', cx, cy, s * 0.8, '#fff', 'center'); }
+function coinIcon(cx, cy, s) { ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(cx, cy, s / 2, 0, 7); ctx.fill(); ctx.strokeStyle = '#b8860b'; ctx.lineWidth = 2; ctx.stroke(); text('$', cx, cy + 1, s * 0.6, '#7a4b00', 'center'); }
+function arrowSmall(x, cy, w = 18) { ctx.fillStyle = '#ffe8a3'; ctx.beginPath(); ctx.moveTo(x, cy - 3); ctx.lineTo(x + w - 7, cy - 3); ctx.lineTo(x + w - 7, cy - 8); ctx.lineTo(x + w, cy); ctx.lineTo(x + w - 7, cy + 8); ctx.lineTo(x + w - 7, cy + 3); ctx.lineTo(x, cy + 3); ctx.fill(); }
 
 // ---------- 狀態 ----------
 let G;
@@ -325,23 +413,23 @@ function settle() {
   let sat = 100; const notes = [];
   served.forEach(it => {
     const [lab] = doneLabel(it);
-    if (lab === '生') { sat -= 50; notes.push(`${ITEMS[it.key].name}是生的`); }
-    else if (lab === '半生') { sat -= 25; notes.push(`${ITEMS[it.key].name}沒熟透`); }
-    else if (lab === '太老') { sat -= 18; notes.push(`${ITEMS[it.key].name}炸太老`); }
-    if (it.cold > 0.5) { sat -= 10; notes.push(`${ITEMS[it.key].name}油膩`); }
-    if (it.old && !has('fridge')) { sat -= 8; notes.push(`${ITEMS[it.key].name}不太新鮮`); }
+    if (lab === '生') { sat -= 50; notes.push(L(`${ITEMS[it.key].name}是生的`, `${NM(it.key)} raw`)); }
+    else if (lab === '半生') { sat -= 25; notes.push(L(`${ITEMS[it.key].name}沒熟透`, `${NM(it.key)} undercooked`)); }
+    else if (lab === '太老') { sat -= 18; notes.push(L(`${ITEMS[it.key].name}炸太老`, `${NM(it.key)} overdone`)); }
+    if (it.cold > 0.5) { sat -= 10; notes.push(L(`${ITEMS[it.key].name}油膩`, `${NM(it.key)} greasy`)); }
+    if (it.old && !has('fridge')) { sat -= 8; notes.push(L(`${ITEMS[it.key].name}不太新鮮`, `${NM(it.key)} stale`)); }
   });
-  if (missing) { sat -= 35 * missing; notes.push(`少了${missing}樣`); }
-  if (!G.season.salt) { sat -= 15; notes.push('沒灑胡椒鹽'); }
-  if (G.season.spicy !== o.spicy) { sat -= 20; notes.push(o.spicy ? '忘了加辣' : '我不吃辣!'); }
-  if (G.season.basil !== o.basil) { sat -= 12; notes.push(o.basil ? '沒有九層塔' : '不要九層塔啦'); }
+  if (missing) { sat -= 35 * missing; notes.push(L(`少了${missing}樣`, `${missing} missing`)); }
+  if (!G.season.salt) { sat -= 15; notes.push(L('沒灑胡椒鹽', 'no salt')); }
+  if (G.season.spicy !== o.spicy) { sat -= 20; notes.push(o.spicy ? L('忘了加辣', 'no chili') : L('我不吃辣!', 'I said no chili')); }
+  if (G.season.basil !== o.basil) { sat -= 12; notes.push(o.basil ? L('沒有九層塔', 'no basil') : L('不要九層塔啦', 'I said no basil')); }
   if (c.patience / c.max < 0.3) sat -= 10;
   sat = clamp(sat, 0, 100);
   // v42:應收 = 每份料的單價逐項加總 + 調味加價;品質/小費另列
-  const lines = served.map(it => [ITEMS[it.key].name, ITEMS[it.key].price]);
+  const lines = served.map(it => [ITEMS[it.key].name, ITEMS[it.key].price, it.key]);
   const base = lines.reduce((a, l) => a + l[1], 0);
-  if (G.season.spicy && o.spicy) lines.push(['辣粉', SEASON_PRICE.spicy]);
-  if (G.season.basil && o.basil) lines.push(['九層塔', SEASON_PRICE.basil]);
+  if (G.season.spicy && o.spicy) lines.push(['辣粉', SEASON_PRICE.spicy, 'jar:spicy']);
+  if (G.season.basil && o.basil) lines.push(['九層塔', SEASON_PRICE.basil, 'jar:basil']);
   let price = lines.reduce((a, l) => a + l[1], 0);
   const missNames = Object.keys(need).filter(k => need[k] > 0).map(k => `${ITEMS[k].name}×${need[k]}`);
   const ct = CTYPES[c.type];
@@ -490,7 +578,7 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
   ctx.strokeStyle = opt.on ? '#ffe8a3' : 'rgba(255,230,180,0.35)'; ctx.lineWidth = opt.on ? 3 : 1.5; ctx.stroke();
   ctx.fillStyle = enabled ? '#fff8e7' : '#9a8f86';
   ctx.font = `bold ${opt.size || 18}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(label, x + w / 2, y + h / 2 + 1);
+  ctx.fillText(tr(label), x + w / 2, y + h / 2 + 1);
   ctx.restore();
 }
 function lighten(c) { return c === '#c0392b' ? '#e04a3a' : c === '#2a6f6a' ? '#36908a' : c === '#6b4226' ? '#8a5733' : c === '#3b5b92' ? '#4c74b8' : '#888'; }
@@ -518,7 +606,7 @@ window.addEventListener('keydown', e => {
 
 // ---------- 繪圖 ----------
 function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
-function text(s, x, y, size = 18, color = '#fff8e7', align = 'left', weight = 'bold') {
+function text(s, x, y, size = 18, color = '#fff8e7', align = 'left', weight = 'bold') { s = tr(s);
   ctx.font = `${weight} ${size}px ${FONT}`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y);
 }
 function wrap(s, x, y, maxW, size, color, lh) {
@@ -634,18 +722,17 @@ function chip(key, x, y, d = null, w = 92, h = 34, it = null) {
 function drawHUD() {
   ctx.fillStyle = 'rgba(10,6,4,0.85)'; ctx.fillRect(0, 0, W, 44);
   const left = Math.max(0, G.dayLen - G.t);
-  text(`第 ${G.night} 晚 · ${G.t < G.dayLen ? '營業中' : '收攤中'}`, 16, 22, 20, '#ffcf6b');
+  text(L(`第 ${G.night} 晚 · ${G.t < G.dayLen ? '營業中' : '收攤中'}`, `Night ${G.night} · ${G.t < G.dayLen ? 'open' : 'closing'}`), 16, 22, 20, '#ffcf6b');
   text(`🕖 ${clockStr()}`, 200, 22, 20);
   ctx.fillStyle = '#3a2a20'; rr(300, 14, 220, 16, 8); ctx.fill();
   ctx.fillStyle = '#f4a261'; rr(300, 14, 220 * clamp(G.t / G.dayLen, 0, 1), 16, 8); ctx.fill();
-  text(`剩 ${Math.ceil(left)} 秒`, 530, 22, 16, '#ddd');
+  text(`⏳${Math.ceil(left)}`, 530, 22, 16, '#ddd');
   if (IMG.uiCash) ctx.drawImage(IMG.uiCash, 606, 12, 32, 18);
-  text(`現金 $${Math.round(G.cash)}`, 640, 22, 20, G.cash >= G.rent ? '#ffd166' : '#ff8787');
-  text(`收攤付租 $${G.rent}${G.debt ? ` +欠$${Math.round(G.debt * 1.2)}` : ''}`, 800, 22, 16, G.debt ? '#ff8787' : '#ccc');
+  text(`$${Math.round(G.cash)}`, 640, 22, 20, G.cash >= G.rent ? '#ffd166' : '#ff8787');
+  text(`🏠 -$${G.rent}${G.debt ? ` +${L('欠', 'debt ')}$${Math.round(G.debt * 1.2)}` : ''}`, 740, 22, 16, G.debt ? '#ff8787' : '#ccc');
   const stars = G.rep / 20; let st = ''; for (let i = 0; i < 5; i++) st += stars >= i + 0.5 ? '★' : '☆';
   if (IMG.uiRep) ctx.drawImage(IMG.uiRep, 958, 8, 28, 28);
-  text(`口碑 ${st}`, 990, 22, 20, '#ffd166');
-  text(`${Math.round(G.rep)}`, 1170, 22, 16, '#aaa');
+  text(`${st} ${Math.round(G.rep)}`, 990, 22, 18, '#ffd166');
 }
 
 function drawScene(time) {
@@ -673,43 +760,52 @@ function drawScene(time) {
 function drawNotebook(x, y) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(-0.025);
   ctx.fillStyle = '#fff3a8'; ctx.fillRect(0, 0, 222, 104);
-  text('熟客筆記 · 戴帽子的大哥(老樣子)', 8, 13, 12, '#7a4b00');
-  wrap(orderText(G.regularOrder.items), 8, 34, 208, 13, '#5a3a00', 17); text('要辣 + 九層塔', 8, 90, 13, '#a33');
+  text(L('📒 熟客(戴帽子)老樣子', '📒 Regular (cap): usual'), 8, 13, 12, '#7a4b00');
+  iconRow(countEnts(G.regularOrder.items, 'self'), 10, 52, 40, 8, 205); jarIcon('salt', 20, 88, 22, true); jarIcon('spicy', 46, 88, 22, G.regularOrder.spicy); jarIcon('basil', 72, 88, 22, G.regularOrder.basil);
   ctx.restore();
 }
 function drawStripBubble(c) {
   const x = 720, y = 146, w = 550, h = 112;
   ctx.fillStyle = '#fffaf0'; rr(x, y, w, h, 12); ctx.fill();
   if (!c || c.atCounter <= 0.5) {
-    if (G.lastLine) { text(G.lastLine.who, x + 14, y + 18, 14, '#a33'); wrap(`「${G.lastLine.text}」`, x + 14, y + 46, w - 28, 17, G.lastLine.angry ? '#c1121f' : '#2a7d4f', 22); }
-    else text(c ? '客人走過來了…' : G.queue.length ? '下一位客人走上前…' : '(等客人上門 — 他們會從左邊走過來)', x + w / 2, y + h / 2, 15, '#8a7a6a', 'center', 'normal');
+    if (G.lastLine) { text(G.lastLine.who, x + 14, y + 18, 14, '#a33'); if (LANG === 'zh') wrap(`「${G.lastLine.text}」`, x + 14, y + 46, w - 28, 17, G.lastLine.angry ? '#c1121f' : '#2a7d4f', 22); }
+    else text(c || G.queue.length ? '🚶 → …' : L('(等客人上門 — 他們會從左邊走過來)', '🚶 → (waiting for guests)'), x + w / 2, y + h / 2, 15, '#8a7a6a', 'center', 'normal');
     return;
   }
   ctx.beginPath(); ctx.moveTo(x, y + 50); ctx.lineTo(x - 22, y + 70); ctx.lineTo(x, y + 78); ctx.fill();
   const ratio = clamp(c.patience / c.max, 0, 1), col = ratio > 0.6 ? '#2a9d55' : ratio > 0.3 ? '#e98a00' : '#d62828';
-  text(c.revealed ? '衛生局稽查員' : CTYPES[c.type].label, x + 14, y + 16, 15, '#a33');
-  text(`耐心 ${Math.max(0, Math.ceil(c.patience))}s`, x + 130, y + 16, 13, col);
+  text(c.revealed ? L('衛生局稽查員', 'Inspector') : CL(c.type), x + 14, y + 16, 15, '#a33');
+  text(`⏱${Math.max(0, Math.ceil(c.patience))}`, x + 150, y + 16, 13, col);
   ctx.fillStyle = '#ddd'; rr(x + 196, y + 12, 90, 8, 4); ctx.fill(); ctx.fillStyle = col; rr(x + 196, y + 12, 90 * ratio, 8, 4); ctx.fill();
   const short = !G.pay ? shortItems(c) : [];
-  if (!G.pay && c.type !== 'regular' && !short.length) [c.order.spicy ? '要辣' : '不要辣', c.order.basil ? '加九層塔' : '不要塔'].forEach((t, i) => {
-    ctx.fillStyle = i === 0 ? (c.order.spicy ? '#e63946' : '#6c757d') : (c.order.basil ? '#2a9d8f' : '#6c757d'); rr(x + w - 222 + i * 106, y + 4, 100, 24, 12); ctx.fill(); text(t, x + w - 172 + i * 106, y + 16, 13, '#fff', 'center'); });
-  wrap(`「${c.line}」`, x + 14, y + 40, w - 28, 14, '#2b1a0e', 18);
+  // v43:調味需求 = 撒粉罐圖示(紅斜線 = 不要)
+  if (!G.pay && c.type !== 'regular' && !short.length) { jarIcon('salt', x + w - 90, y + 18, 26, true); jarIcon('spicy', x + w - 60, y + 18, 26, c.order.spicy); jarIcon('basil', x + w - 30, y + 18, 26, c.order.basil); }
+  if (LANG === 'zh') wrap(`「${c.line}」`, x + 14, y + 40, w - 120, 13, '#6b5a4a', 17);
   if (G.pay) {
-    const p = G.pay; text(`滿意度 ${p.sat}`, x + 14, y + 92, 17, p.sat >= 80 ? '#2a9d8f' : p.sat >= 50 ? '#e9a400' : '#d62828');
-    if (p.notes.length) wrap('問題:' + p.notes.slice(0, 3).join('、'), x + 120, y + 92, w - 134, 13, '#7a4b4b', 16);
+    const p = G.pay, face = p.sat >= 80 ? '😄' : p.sat >= 50 ? '😐' : '😠';
+    text(face, x + 26, y + 88, 26, '#000', 'center'); ctx.fillStyle = '#ddd'; rr(x + 46, y + 82, 120, 12, 6); ctx.fill(); ctx.fillStyle = p.sat >= 80 ? '#2a9d8f' : p.sat >= 50 ? '#e9a400' : '#d62828'; rr(x + 46, y + 82, 120 * p.sat / 100, 12, 6); ctx.fill();
+    if (p.notes.length) wrap(L('問題:', 'Issues: ') + p.notes.slice(0, 3).join(L('、', ', ')), x + 178, y + 88, w - 190, 12, '#7a4b4b', 15);
   } else if (short.length) {
-    ctx.fillStyle = 'rgba(214,40,40,0.12)'; rr(x + 6, y + 70, w - 12, 38, 8); ctx.fill();
-    text(`缺:${short.map(k => ITEMS[k].name).join('、')}`, x + 14, y + 89, 14, '#d62828');
+    ctx.fillStyle = 'rgba(214,40,40,0.12)'; rr(x + 6, y + 66, w - 12, 42, 8); ctx.fill();
+    iconRow(short.map(k => [k, 1, 'short']), x + 14, y + 87, 30, 6, w - 290);
     btn('swapOrder', x + w - 252, y + 72, 120, 34, '🙇 道歉換單', A.swapOrder, { enabled: !c.swapped, color: '#2a6f6a', size: 13 });
     btn('sendAway', x + w - 126, y + 72, 118, 34, '請他離開(-2)', A.sendAway, { color: '#4a4a4a', size: 13 });
   } else {
-    if (c.type === 'regular' && !c.swapped && !c.handed) text('點餐:老樣子(看左邊熟客筆記)', x + 14, y + 92, 15, '#555');
-    else if (!c.handed) wrap(c.waitBowl ? '⚠ 兩個鐵盆都有料 — 先把盆下鍋才能接客人的盆' : '客人正把撿好的鐵盆遞給你…', x + 14, y + 92, w - 140, 14, c.waitBowl ? '#d62828' : '#555', 18);
-    else { const ml = mustLeft(c); text(c.picked.length ? `盆裡:${orderText(c.picked)}` : '盆裡:(空)', x + 14, y + 82, 13, '#2a7d4f');
-      text(ml.length ? `要你補:${orderText(ml)}` : (c.need.length ? `已補好:${orderText(c.need)} ✓ 可以下鍋` : '不用補,直接下鍋'), x + 14, y + 100, 14, ml.length ? '#d9480f' : '#2a7d4f'); }
+    if (c.type === 'regular' && !c.swapped && !c.handed) { text('📒', x + 24, y + 88, 22, '#555', 'center'); arrowSmall(x + 40, y + 88, 22); iconRow(countEnts(G.regularOrder.items, 'self'), x + 68, y + 88, 30, 4, 300); }
+    else if (!c.handed) { bowlIcon(x + 30, y + 88, 34); if (c.waitBowl) { crossMark(x + 50, y + 76, 9); text(L('兩個鐵盆都滿 → 先下鍋', 'Both bowls full → pour first'), x + 64, y + 88, 13, '#d62828'); } else { arrowSmall(x + 52, y + 88, 24); text('…', x + 84, y + 88, 18, '#555'); } }
+    else { const ml = mustLeft(c), mc = countBy(ml);
+      // 盆裡(一般圖示) + 要你補(橘色脈動) / 補好(✓)
+      bowlIcon(x + 26, y + 88, 30);
+      const ents = countEnts(c.picked, 'self');
+      const nc = countBy(c.need); Object.keys(nc).forEach(k => { const left = mc[k] || 0, done = nc[k] - left; if (left) ents.push([k, left, 'need']); if (done) ents.push([k, done, 'done']); });
+      if (!ents.length) text(L('(空)', '(empty)'), x + 48, y + 88, 13, '#555');
+      const wr = iconRow(ents, x + 46, y + 88, 34, 6, w - 180);
+      if (!ml.length) { arrowSmall(x + 52 + wr, y + 88, 22); netIcon(x + 92 + wr, y + 88, 30); }
+    }
     if (c.type === 'byo' || c.sus) btn('report', x + w - 112, y + 74, 100, 32, '🚨 檢舉', A.report, { color: '#3b5b92', size: 14 });
   }
 }
+function countEnts(keys, st) { const m = countBy(keys); return Object.keys(m).map(k => [k, m[k], st]); }
 
 // ---------- 左欄:食材、油溫、換油、熟客筆記 ----------
 function drawLeft() {
@@ -723,11 +819,11 @@ function drawLeft() {
     const fim = foodImg(k, false);
     if (fim) { ctx.save(); if (k === 'byo' && !IMG.raw_byo) ctx.filter = 'hue-rotate(60deg) saturate(0.6)'; ctx.drawImage(fim, bx + 3, by + 6, 40, 40); ctx.restore(); }
     if (mlk.includes(k) && Math.sin(performance.now() / 120) > -0.3) { ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 3.5; rr(bx - 1, by - 1, 114, 54, 9); ctx.stroke(); }
-    if (I.vendor) { ctx.fillStyle = '#c0392b'; rr(bx + 2, by + 2, 26, 13, 4); ctx.fill(); text('攤家', bx + 15, by + 8.5, 9, '#fff', 'center'); }
-    text(I.name, bx + 46, by + 12, 15);
-    ctx.fillStyle = big ? '#e07a1f' : '#3b7fb8'; rr(bx + 90, by + 4, 18, 14, 4); ctx.fill(); text(big ? '大' : '小', bx + 99, by + 11, 10, '#fff', 'center');
+    if (I.vendor) { plusMark(bx + 8, by + 8, 7); }
+    text(NM(k), bx + 46, by + 12, LANG === 'en' ? 11 : 15);
+    ctx.fillStyle = big ? '#e07a1f' : '#3b7fb8'; rr(bx + 90, by + 4, 18, 14, 4); ctx.fill(); text(big ? 'L' : 'S', bx + 99, by + 11, 10, '#fff', 'center');
     text(`$${I.price}`, bx + 46, by + 29, 15, '#ffd166'); text('ASDFGHJ'[i], bx + 100, by + 29, 11, '#bba', 'center', 'normal');
-    if (k !== 'byo') { const v = G.inv[k] || { old: 0 }; const lab = q <= 0 ? '缺貨' : `剩${q}${v.old ? `(夜${v.old})` : ''}`;
+    if (k !== 'byo') { const v = G.inv[k] || { old: 0 }; const lab = q <= 0 ? '✗ 0' : `📦${q}${v.old ? ` (${L('夜', 'old')}${v.old})` : ''}`;
       ctx.fillStyle = q <= 0 ? '#d62828' : q <= 3 ? '#e9a400' : 'rgba(0,0,0,0.45)'; rr(bx + 46, by + 39, 62, 11, 4); ctx.fill(); text(lab, bx + 77, by + 44.5, 10, '#fff', 'center'); }
   });
   // v41:鐵盆(備料盆)— 料先撿進盆,再按盆下鍋
@@ -735,11 +831,11 @@ function drawLeft() {
   G.bowls.forEach((B, bi) => drawBowl(bi, B, 14 + bi * 118, 514, 112, 112, cid));
   // 油溫/油況(壓縮成兩排)
   const ty = 642, old = G.oilUse > OIL_LIMIT;
-  text(`油溫 ${Math.round(G.temp)}°C`, 16, ty, 15, G.temp > 182 ? '#ff8f6b' : G.temp < 155 ? '#9ad1ff' : '#ffd166');
-  text(`油況 ${old ? '老油!' : '新鮮'} ${Math.round(G.oilUse)}/${OIL_LIMIT}${has('filter') ? ' 濾' : ''}`, 120, ty, 12, old ? '#ff6b6b' : '#b7e4c7', 'left', 'normal');
-  TEMPS.forEach((tp, i) => btn('temp_' + tp.key, 14 + i * 58, ty + 10, 54, 28, `${tp.name}${'QWE'[i]}`, () => A.setTemp(tp.key), { on: G.tempKey === tp.key, color: '#2a6f6a', size: 12 }));
+  text(`🌡 ${Math.round(G.temp)}°C`, 16, ty, 15, G.temp > 182 ? '#ff8f6b' : G.temp < 155 ? '#9ad1ff' : '#ffd166');
+  text(`🛢 ${old ? L('老油!', 'OLD!') : L('新鮮', 'fresh')} ${Math.round(G.oilUse)}/${OIL_LIMIT}${has('filter') ? ' F' : ''}`, 120, ty, 12, old ? '#ff6b6b' : '#b7e4c7', 'left', 'normal');
+  TEMPS.forEach((tp, i) => btn('temp_' + tp.key, 14 + i * 58, ty + 10, 54, 28, `${L(tp.name, ['Low', 'Mid', 'High'][i])}${'QWE'[i]}`, () => A.setTemp(tp.key), { on: G.tempKey === tp.key, color: '#2a6f6a', size: 12 }));
   btn('oil', 190, ty + 10, 56, 28, `換油O`, A.changeOil, { enabled: !fried().length && G.oilChange <= 0, color: '#6b4226', size: 12 });
-  text(`換油 $${OIL_CHANGE_COST},鍋要空`, 16, ty + 54, 11, '#a89a86', 'left', 'normal');
+  text(`🛢 $${OIL_CHANGE_COST} ${L('鍋要空', '(empty fryer)')}`, 16, ty + 54, 11, '#a89a86', 'left', 'normal');
 }
 // v41:不鏽鋼鐵盆(俯視,canvas 畫)
 function drawBowl(bi, B, x, y, w, h, cid) {
@@ -762,13 +858,16 @@ function drawBowl(bi, B, x, y, w, h, cid) {
     if (im) { const sc = s / Math.max(im.width, im.height); ctx.drawImage(im, ix - im.width * sc / 2, iy - im.height * sc / 2, im.width * sc, im.height * sc); }
     else { ctx.fillStyle = ITEMS[it.key].color; ctx.beginPath(); ctx.arc(ix, iy, s / 3, 0, 7); ctx.fill(); } });
   ctx.restore();
-  text(`${bi + 1}號盆 ${n}`, x + 6, y + 10, 12, sel ? '#ffd166' : '#d8c8b0', 'left');
-  if (n && B.cid === cid) { ctx.fillStyle = '#4cc9f0'; rr(x + w - 36, y + 3, 32, 15, 4); ctx.fill(); text('這單', x + w - 20, y + 10.5, 10, '#06283d', 'center'); }
-  else if (n && B.cid) { ctx.fillStyle = '#888'; rr(x + w - 36, y + 3, 32, 15, 4); ctx.fill(); text('上一單', x + w - 20, y + 10.5, 9, '#fff', 'center'); }
+  text(`#${bi + 1} · ${n}`, x + 6, y + 10, 12, sel ? '#ffd166' : '#d8c8b0', 'left');
+  if (n && B.cid === cid) { ctx.fillStyle = '#4cc9f0'; rr(x + w - 36, y + 3, 32, 15, 4); ctx.fill(); text(L('這單', 'NOW'), x + w - 20, y + 10.5, 10, '#06283d', 'center'); }
+  else if (n && B.cid) { ctx.fillStyle = '#888'; rr(x + w - 36, y + 3, 32, 15, 4); ctx.fill(); text(L('上一單', 'prev'), x + w - 20, y + 10.5, 9, '#fff', 'center'); }
   const cc = G.counter, mine = n && cc && cc.handed && B.cid === cc.id && !G.pay, ml = mine ? mustLeft(cc) : [];
   if (ml.length) { ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = G.mustFlash > 0 && Math.sin(performance.now() / 80) > 0 ? 5 : 3; rr(x, y, w, h, 10); ctx.stroke(); }
-  const lab = ml.length ? `還要補 ${ml.length} 樣` : n ? '▼ 按盆下鍋' : sel ? '等客人交盆' : '空盆';
-  ctx.fillStyle = ml.length ? '#e07a1f' : n ? '#c0392b' : 'rgba(0,0,0,0.55)'; rr(x + 6, y + h - 20, w - 12, 16, 5); ctx.fill(); text(lab, cx, y + h - 12, 11, '#fff', 'center');
+  // v43:還要補 = 橘色脈動圖示;齊了 = 盆→網 圖示
+  ctx.fillStyle = ml.length ? '#e07a1f' : n ? '#c0392b' : 'rgba(0,0,0,0.55)'; rr(x + 6, y + h - 22, w - 12, 20, 5); ctx.fill();
+  if (ml.length) { const e = countEnts(ml, 'need'); iconRow(e, x + 12, y + h - 12, 16, 3, w - 20); }
+  else if (n) { text('▼', x + 22, y + h - 12, 12, '#fff', 'center'); netIcon(cx + 6, y + h - 12, 26); text('V', x + w - 16, y + h - 12, 11, '#ffe8a3', 'center'); }
+  else text(sel ? '⏳' : '—', cx, y + h - 12, 12, '#fff', 'center');
 }
 
 // ---------- 中央:俯視油槽 ----------
@@ -782,22 +881,25 @@ function drawTank() {
   if (G.fullFlash > 0) { ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; rr(X + 2, Y + 2, TW - 4, TH - 4, 14); ctx.stroke(); }
   // 提示條(油槽上緣)
   const h = hint(); ctx.fillStyle = 'rgba(10,6,4,0.8)'; rr(266, 271, 744, 28, 8); ctx.fill();
-  if (h) text('💡 ' + h, 278, 285, 15, '#ffe8a3', 'left', 'normal');
+  if (h) G._hint = h; // 箭頭最後才畫(蓋在最上層)
+  if (h) drawHint({ ...h, tgt: [] }, 278, 285);
   // 沒買的網位:可升級
   G.baskets.filter(b => b.locked).forEach(b => { const { x, y, w, h } = cellRect(b); const u = UPGRADES.find(q => q.id === b.up);
     ctx.fillStyle = 'rgba(20,12,6,0.55)'; rr(x, y, w, h, 10); ctx.fill();
     ctx.setLineDash([8, 6]); ctx.strokeStyle = 'rgba(255,230,180,0.45)'; ctx.lineWidth = 2; rr(x, y, w, h, 10); ctx.stroke(); ctx.setLineDash([]);
     text('🔒 可升級', x + w / 2, y + h / 2 - 12, b.s === 'L' ? 20 : 14, '#d8c8b0', 'center');
-    text(b.s === 'L' ? `${u.name.split('(')[0]} $${u.price}` : `小網 $${u.price}`, x + w / 2, y + h / 2 + 14, b.s === 'L' ? 15 : 11, '#a89a86', 'center', 'normal'); });
+    text(`$${u.price}`, x + w / 2, y + h / 2 + 14, b.s === 'L' ? 15 : 11, '#a89a86', 'center', 'normal'); });
   const cid = G.counter && !G.pay ? G.counter.id : -1;
   for (let i = 0; i < G.fryer.length; i++) if (!G.baskets[i].locked) drawSlot(i, G.fryer[i], now, cid);
-  if (G.oilChange > 0) { ctx.fillStyle = 'rgba(0,0,0,0.65)'; rr(400, 440, 476, 80, 12); ctx.fill(); text(`換油中… ${G.oilChange.toFixed(1)}s`, 638, 480, 30, '#fff', 'center'); }
+  if (G.oilChange > 0) { ctx.fillStyle = 'rgba(0,0,0,0.65)'; rr(400, 440, 476, 80, 12); ctx.fill(); text(`🛢 ${L('換油中', 'Changing oil')}… ${G.oilChange.toFixed(1)}s`, 638, 480, 30, '#fff', 'center'); }
   // 下緣控制條
   ctx.fillStyle = 'rgba(10,6,4,0.8)'; rr(266, 658, 744, 48, 10); ctx.fill();
-  text(`① 客人交盆,補上橘色的料(雞排/鹽酥雞/加點) → ② 按鐵盆(V)下鍋 → ③ 熟了點網子(1–6)整網撈`, 280, 671, 13, '#d8c8b0', 'left', 'normal');
+  // v43:流程教學圖(取代長句):盆 + 補料 → 網 → ✓ → 撈 → 撒粉 → 袋 → $
+  { const st = [['bowl'], ['food', 'chicken', 'need'], ['arrow'], ['net'], ['arrow'], ['check'], ['text', '⬆'], ['arrow'], ['jar', 'salt'], ['arrow'], ['bag'], ['arrow'], ['coin']];
+    drawHint({ t: '', seq: st, tgt: [] }, 282, 672); }
   const cnt = s => G.baskets.filter((b, j) => b.s === s && !b.locked && !G.fryer[j].length).length, bowlN = bowlItems().length;
-  text(`雞排→大網 · 小料每 ${SMALL_CAP} 份一小網`, 280, 693, 14, '#ffd59a', 'left', 'normal');
-  text(`空大網 ${cnt('L')} · 空小網 ${cnt('S')}`, 500, 693, 15, G.fullFlash > 0 ? '#ff6b6b' : '#b7e4c7', 'left');
+  foodIcon('chicken', 292, 693, 18); arrowSmall(304, 693, 14); text(L('大', 'L'), 324, 693, 12, '#ffd59a'); foodIcon('tempura', 352, 693, 16); text(`×${SMALL_CAP}`, 362, 693, 11, '#ffd59a'); arrowSmall(384, 693, 14); text(L('小', 'S'), 404, 693, 12, '#ffd59a');
+  text(`${L('空網', 'Free')}  L ${cnt('L')} · S ${cnt('S')}`, 500, 693, 15, G.fullFlash > 0 ? '#ff6b6b' : '#b7e4c7', 'left');
   if (bowlN && !G.fryer.some((n, j) => n.length && G.baskets[j].inOil && netReady(n))) btn('pour', 810, 662, 194, 40, `鐵盆下鍋(V)`, () => A.pour(), { enabled: G.oilChange <= 0, size: 16 });
   else btn('liftAll', 810, 662, 194, 40, '撈熟的(空白鍵)', A.liftAll, { enabled: G.fryer.some((n, j) => n.length && G.baskets[j].inOil && netReady(n)), size: 16 });
 }
@@ -818,15 +920,15 @@ function drawSlot(i, net, now, cid) {
   else { ctx.strokeStyle = '#c9ced4'; ctx.lineWidth = 3; rr(x + 3, y + 3, w - 6, h - 6, 8); ctx.stroke(); }
   const bs = big ? 30 : 22; ctx.fillStyle = '#ffd166'; rr(x + 6, y + 6, bs, bs, 6); ctx.fill(); text(String(i + 1), x + 6 + bs / 2, y + 6 + bs / 2, big ? 20 : 15, '#2b1a0e', 'center');
   ctx.fillStyle = big ? 'rgba(224,122,31,0.9)' : 'rgba(59,127,184,0.9)'; rr(x + bs + 10, y + 7, big ? 46 : 74, 20, 5); ctx.fill();
-  text(big ? '大網' : `小網 ${net.length}/${SMALL_CAP}`, x + bs + 10 + (big ? 23 : 37), y + 17, 12, '#fff', 'center');
+  text(big ? L('大網', 'L') : `${L('小網', 'S')} ${net.length}/${SMALL_CAP}`, x + bs + 10 + (big ? 23 : 37), y + 17, 12, '#fff', 'center');
   if (!on) {
     ctx.fillStyle = 'rgba(0,0,0,0.5)'; rr(x + w / 2 - 70, y + h / 2 - 14, 140, 28, 8); ctx.fill();
-    text(big ? '空 · 放雞排' : '空 · 小料混炸', x + w / 2, y + h / 2, 15, '#e8d9c0', 'center');
+    if (big) { ctx.save(); ctx.globalAlpha = 0.45; foodIcon('chicken', x + w / 2, y + h / 2, 40, false); ctx.restore(); } else { ctx.save(); ctx.globalAlpha = 0.45; ['tempura', 'bean', 'squid'].forEach((k, q) => foodIcon(k, x + w / 2 - 34 + q * 34, y + h / 2, 26, false)); ctx.restore(); }
     return;
   }
   const inOil = b.inOil;
   buttons.push({ id: 'lift_' + i, x, y, w, h, enabled: true, onClick: () => A.tapNet(i) });
-  if (net.every(it => it.cid === cid)) { ctx.fillStyle = '#4cc9f0'; rr(x + w - 50, y + 7, 42, 20, 5); ctx.fill(); text('這單', x + w - 29, y + 17, 12, '#06283d', 'center'); }
+  if (net.every(it => it.cid === cid)) { ctx.fillStyle = '#4cc9f0'; rr(x + w - 50, y + 7, 42, 20, 5); ctx.fill(); text(L('這單', 'NOW'), x + w - 29, y + 17, 12, '#06283d', 'center'); }
   // 料的圖(小網排一排,不再各自標熟度)
   const n = big ? 1 : SMALL_CAP, cw = (w - 12) / n, P = b.p || 0;
   net.forEach((it, j) => {
@@ -838,15 +940,20 @@ function drawSlot(i, net, now, cid) {
       else { const m = clamp(it.d / I.lo, 0, 1); fit(rawI, 1); if (m > 0) fit(frI, m, it.d > I.hi ? `brightness(${1 - 0.5 * (it.d - I.hi) / (100 - I.hi)}) sepia(0.3)` : ''); } }
     else if (fim) { ctx.save(); ctx.filter = it.d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${1.35 - 0.7 * k}) saturate(${0.6 + 0.6 * k})`; if (it.key === 'byo') ctx.filter += ' hue-rotate(60deg)'; ctx.drawImage(fim, cx - s / 2, cy - s / 2, s, s); ctx.restore(); }
     else { ctx.fillStyle = I.color; ctx.beginPath(); ctx.arc(cx, cy, s / 3, 0, 7); ctx.fill(); }
-    if (it.old && !has('fridge')) text('隔夜', cx + cw / 2 - 4, cy - s / 2 + 2, 11, '#ffb703', 'right');
+    if (it.old && !has('fridge')) text(L('隔夜', 'old'), cx + cw / 2 - 4, cy - s / 2 + 2, 11, '#ffb703', 'right');
   });
   const blink = Math.sin(now * Math.PI * 6) > 0;
   const ph = big ? 34 : 22, px = x + 8, pw = w - 16, py = y + h - ph - (big ? 30 : 14);
   const burnt = P >= 100, warn = !burnt && P > SH_HI, ready = !burnt && !warn && P >= SH_LO;
-  const lab = burnt ? '焦了!快撈' : warn ? '快焦!撈起' : ready ? '剛好!撈起' : `${P < 40 ? '生' : '半生'} 還要 ${((SH_LO - P) / Math.max(0.1, netSpeed(net))).toFixed(1)}s`;
+  // v43:狀態 = 顏色條 + 圖示(生=藍色冰晶+進度圈 · 剛好=綠勾+上撈箭頭 · 快焦=橘火 · 焦=大紅火),不再顯示「還要 x.xs」
   const col = burnt ? '#7a1010' : warn ? '#e8742a' : ready ? '#21b36b' : '#4f7fa8';
   ctx.fillStyle = ready || warn || burnt ? col : 'rgba(20,30,45,0.88)'; rr(px, py, pw, ph, 7); ctx.fill();
-  text(lab, px + pw / 2, py + ph / 2, big ? 20 : 14, '#fff', 'center');
+  const ic = ph * 0.8, icx = px + pw / 2, icy = py + ph / 2;
+  if (burnt) { flameIcon(icx - ic * 0.6, icy, ic, true); flameIcon(icx + ic * 0.6, icy, ic, true); }
+  else if (warn) { flameIcon(icx - ic * 0.7, icy, ic); text('⬆', icx + ic * 0.5, icy, ic * 0.8, '#fff', 'center'); }
+  else if (ready) { checkMark(icx - ic * 0.7, icy, ic * 0.45, '#0e7a45'); text('⬆', icx + ic * 0.5, icy, ic * 0.8, '#fff', 'center'); }
+  else { rawIcon(icx - ic * 0.8, icy, ic * 0.8); const pr = clamp(P / SH_LO, 0, 1); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(icx + ic * 0.5, icy, ic * 0.38, 0, 7); ctx.stroke();
+    ctx.strokeStyle = '#9ad1ff'; ctx.beginPath(); ctx.arc(icx + ic * 0.5, icy, ic * 0.38, -Math.PI / 2, -Math.PI / 2 + pr * Math.PI * 2); ctx.stroke(); }
   const by = py + ph + 3, bh = big ? 14 : 8;
   ctx.fillStyle = '#1a1a1a'; ctx.fillRect(px, by, pw, bh);
   ctx.fillStyle = 'rgba(79,127,168,0.8)'; ctx.fillRect(px, by, pw * SH_LO / 100, bh);
@@ -871,7 +978,7 @@ function shaker(id, x, y, label, body, cap, on, en) {
   ctx.fillStyle = 'rgba(230,240,245,0.35)'; rr(-11, -8, 22, 28, 4); ctx.fill(); // 玻璃
   ctx.fillStyle = body; rr(-10, -1, 20, 20, 3); ctx.fill(); // 粉
   ctx.fillStyle = g; rr(-11, -8, 22, 28, 4); ctx.fill();
-  ctx.fillStyle = '#fff8e7'; ctx.fillRect(-10, 4, 20, 8); ctx.fillStyle = cap; ctx.font = `bold 7px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label.slice(0, id === 'spicy' ? 2 : 3), 0, 8.5);
+  ctx.fillStyle = '#fff8e7'; ctx.fillRect(-10, 4, 20, 8); ctx.fillStyle = cap; ctx.font = `bold 7px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(LANG === 'en' ? '' : label.slice(0, id === 'spicy' ? 2 : 3), 0, 8.5);
   ctx.restore();
   text(label.split(' ')[0], x + 54, y + 20, 11, en ? '#fff8e7' : '#9a8f86', 'center');
   text(label.split(' ')[1] || '', x + 54, y + 38, 11, '#ffd59a', 'center', 'normal');
@@ -886,19 +993,26 @@ function drawRight() {
   text(G.pay ? '收銀' : '起鍋盤 — 調味、裝袋', X, 284, 15, '#ffd59a');
   if (!G.pay) {
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 296, 230, 112, 10); ctx.fill();
-    if (!G.plate.length) text('(撈起的會放這裡)', X + 115, 352, 14, '#8a7a6a', 'center', 'normal');
-    G.plate.forEach((it, i) => { const bx = X + 4 + (i % 2) * 113, by = 300 + Math.floor(i / 2) * 27; chip(it.key, bx, by, it.d, 108, 24);
-      const [lab, col] = doneLabel(it); ctx.fillStyle = col; rr(bx + 74, by + 13, 34, 12, 4); ctx.fill(); text(lab, bx + 91, by + 19, 9, '#fff', 'center'); });
+    if (!G.plate.length) { ctx.save(); ctx.globalAlpha = 0.5; netIcon(X + 85, 352, 34); arrowSmall(X + 108, 352, 22); ctx.restore(); text('🍽', X + 150, 352, 22, '#8a7a6a', 'center'); }
+    // v43:盤上 = 食材圖示 + 熟度小圖示(✓剛好 · 冰晶=生 · 火=太老/焦)
+    G.plate.forEach((it, i) => { const per = 5, sz = 40, bx = X + 6 + (i % per) * 45, by = 300 + Math.floor(i / per) * 44; const [lab] = doneLabel(it);
+      ctx.fillStyle = 'rgba(30,15,6,0.55)'; rr(bx, by, sz + 2, sz + 2, 6); ctx.fill();
+      if (it.d >= 100 && IMG.burnt) { const im = IMG.burnt, sc = sz / Math.max(im.width, im.height); ctx.drawImage(im, bx + 1 + sz / 2 - im.width * sc / 2, by + 1 + sz / 2 - im.height * sc / 2, im.width * sc, im.height * sc); } else foodIcon(it.key, bx + 1 + sz / 2, by + 1 + sz / 2, sz, it.d >= ITEMS[it.key].lo * 0.6);
+      const mx = bx + sz - 4, my = by + 6;
+      if (lab === '剛好') checkMark(mx, my, 7); else if (lab === '生' || lab === '半生') { ctx.fillStyle = '#4f7fa8'; ctx.beginPath(); ctx.arc(mx, my, 8, 0, 7); ctx.fill(); rawIcon(mx, my, 11); } else flameIcon(mx, my, 16, lab === '焦黑'); });
     const en = G.plate.length > 0;
-    shaker('salt', X, 410, '胡椒鹽 Z', '#e9dfc8', '#6b5a44', G.season.salt, en);
-    shaker('spicy', X + 78, 410, '辣粉+5 X', '#c8321f', '#7a1a10', G.season.spicy, en);
-    shaker('basil', X + 156, 410, '九層塔 C', '#3f8f3a', '#1f4f1c', G.season.basil, en);
+    shaker('salt', X, 410, L('胡椒鹽 Z', 'Salt Z'), '#e9dfc8', '#6b5a44', G.season.salt, en);
+    shaker('spicy', X + 78, 410, L('辣粉+5 X', 'Chili+5 X'), '#c8321f', '#7a1a10', G.season.spicy, en);
+    shaker('basil', X + 156, 410, L('九層塔 C', 'Basil+3 C'), '#3f8f3a', '#1f4f1c', G.season.basil, en);
     btn('dump', X, 468, 230, 46, '倒掉', A.dump, { enabled: en, color: '#6b4226', size: 15 });
     const canBag = c && en && c.atCounter > 0.6;
-    if (c && c.atCounter > 0.5) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 592, 230, 112, 10); ctx.fill(); text('這單(✓=盤上有 · 橘=要你補)', X + 8, 606, 13, '#ffd59a');
+    if (c && c.atCounter > 0.5) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 592, 230, 112, 10); ctx.fill(); text('📋', X + 14, 608, 14, '#ffd59a', 'center');
+      // v43:這單 = 圖示格(✓ 盤上有 · 橘色脈動＋ 要你補 · 半透明 = 還在鍋裡)
       const need = c.order.items; const pk = G.plate.map(q => q.key), ml = mustLeft(c);
-      need.slice(0, 8).forEach((k, i) => { const j = pk.indexOf(k); if (j >= 0) pk.splice(j, 1); const mi = ml.indexOf(k), must = j < 0 && mi >= 0; if (must) ml.splice(mi, 1);
-        text(`${j >= 0 ? '✓' : must ? '＋' : '·'} ${ITEMS[k].name} $${ITEMS[k].price}`, X + 10 + (i % 2) * 112, 626 + Math.floor(i / 2) * 19, 13, j >= 0 ? '#8ce99a' : must ? '#ff9f1c' : '#d8c8b0'); }); }
+      need.slice(0, 10).forEach((k, i) => { const j = pk.indexOf(k); if (j >= 0) pk.splice(j, 1); const mi = ml.indexOf(k), must = j < 0 && mi >= 0; if (must) ml.splice(mi, 1);
+        const cx2 = X + 22 + (i % 5) * 46, cy2 = 636 + Math.floor(i / 5) * 40;
+        if (j < 0 && !must) ctx.globalAlpha = 0.45; iconBadge(k, 1, cx2, cy2, 30, j >= 0 ? 'done' : must ? 'need' : 'self'); ctx.globalAlpha = 1; });
+      if (c.type !== 'regular') { jarIcon('salt', X + 150, 606, 18, true); jarIcon('spicy', X + 174, 606, 18, c.order.spicy); jarIcon('basil', X + 198, 606, 18, c.order.basil); } }
     const bagLabel = !c ? '🛍 裝袋(等客人)' : !en ? '🛍 裝袋(盤子空)' : c.atCounter <= 0.6 ? '🛍 裝袋(客人還沒到)' : '🛍 裝袋 (Enter)';
     btn('bag', X, 522, 230, 60, bagLabel, A.bag, { enabled: !!canBag, clickable: en && !!c, size: canBag ? 20 : 17 });
     if (G.bagHint > 0) G.bagHint -= 1 / 60;
@@ -906,28 +1020,31 @@ function drawRight() {
     const p = G.pay;
     // v42:逐項收據
     ctx.fillStyle = '#fbf6e9'; rr(X, 294, 230, 210, 6); ctx.fill();
-    text('收據(逐項加總)', X + 8, 306, 12, '#7a4b00');
-    const L = p.lines || [], cols = L.length > 7 ? 2 : 1, per = Math.ceil(L.length / cols), lh = per > 7 ? 14 : 17;
-    L.forEach(([nm, v], i) => { const cx2 = X + 8 + Math.floor(i / per) * 112, cy2 = 324 + (i % per) * lh, cw2 = cols === 2 ? 104 : 214;
-      text(nm, cx2, cy2, 13, '#2b1a0e', 'left', 'normal'); text(`${v}`, cx2 + cw2, cy2, 13, '#2b1a0e', 'right'); });
+    text('🧾', X + 14, 306, 13, '#7a4b00', 'center');
+    const LL = []; (p.lines || []).forEach(([nm, v, key]) => { key = key || nm; const e = LL.find(q => q[0] === key); if (e) e[2]++; else LL.push([key, v, 1]); });
+    const cols = LL.length > 6 ? 2 : 1, per = Math.ceil(LL.length / cols), lh = per > 6 ? 16 : 20;
+    // v43:收據 = 圖示 × 單價(同品項合併成 ×n)
+    LL.forEach(([key, v, n], i) => { const cx2 = X + 8 + Math.floor(i / per) * 112, cy2 = 324 + (i % per) * lh, cw2 = cols === 2 ? 104 : 214;
+      if (key.startsWith('jar:')) jarIcon(key.slice(4), cx2 + 9, cy2, lh + 2, true); else foodIcon(key, cx2 + 9, cy2, lh + 4);
+      text(`×${n}  $${v}`, cx2 + 22, cy2, 13, '#2b1a0e', 'left', 'normal'); text(`$${v * n}`, cx2 + cw2, cy2, 13, '#2b1a0e', 'right'); });
     let yy = 324 + per * lh + 2; ctx.fillStyle = '#c9b89a'; ctx.fillRect(X + 8, yy - 6, 214, 1.5);
-    ctx.font = `bold 11px ${FONT}`; const nums = L.map(l => l[1]); let f = nums.join('+') + ` = $${p.price}`; for (let m = nums.length - 1; m > 1 && ctx.measureText(f).width > 214; m--) f = nums.slice(0, m).join('+') + '+… = $' + p.price;
+    ctx.font = `bold 11px ${FONT}`; const nums = (p.lines || []).map(l => l[1]); let f = nums.join('+') + ` = $${p.price}`; for (let m = nums.length - 1; m > 1 && ctx.measureText(f).width > 214; m--) f = nums.slice(0, m).join('+') + '+… = $' + p.price;
     text(f, X + 8, yy + 4, 11, '#5a3a00'); yy += 20;
-    if (p.missNames && p.missNames.length) { text(`少給 ${p.missNames.join('、')} 不收`, X + 8, yy, 11, '#c1121f', 'left', 'normal'); yy += 15; }
-    if (p.offer < p.price) { text(p.sat < 40 ? `品質差(滿意${p.sat}) → 客人只出` : '客人殺價', X + 8, yy, 12, '#c1121f'); text(`$${p.offer}`, X + 222, yy, 13, '#c1121f', 'right'); yy += 16; }
-    if (p.tip) { text(`小費(滿意度 ${p.sat})`, X + 8, yy, 12, '#1f7a3f'); text(`+${p.tip}`, X + 222, yy, 13, '#1f7a3f', 'right'); yy += 16; }
-    text(`應收 $${p.price}`, X + 8, 492, 20, '#c0392b');
+    if (p.missNames && p.missNames.length) { text(L(`少給 ${p.missNames.join('、')} 不收`, `missing ${p.missNames.length}: $0`), X + 8, yy, 11, '#c1121f', 'left', 'normal'); yy += 15; }
+    if (p.offer < p.price) { text(p.sat < 40 ? L(`品質差(滿意${p.sat}) → 客人只出`, `😠 bad food (${p.sat}) → offer`) : L('客人殺價', '🤏 haggle'), X + 8, yy, 12, '#c1121f'); text(`$${p.offer}`, X + 222, yy, 13, '#c1121f', 'right'); yy += 16; }
+    if (p.tip) { text(L(`小費(滿意度 ${p.sat})`, `😄 tip (${p.sat})`), X + 8, yy, 12, '#1f7a3f'); text(`+${p.tip}`, X + 222, yy, 13, '#1f7a3f', 'right'); yy += 16; }
+    coinIcon(X + 18, 492, 22); text(`$${p.price}`, X + 34, 492, 22, '#c0392b');
     if (p.offer < p.price) {
       const mid = Math.round((p.offer + p.price) / 2 / 5) * 5;
-      btn('payAccept', X, 510, 230, 44, `成交 $${p.offer}`, A.payAccept, { color: '#2a6f6a' });
-      btn('payMid', X, 558, 230, 44, `讓一半 $${mid}`, A.payMid, { enabled: !p.midTried, color: '#6b4226' });
-      btn('payInsist', X, 606, 230, 44, `堅持 $${p.price}(可能氣走)`, A.payInsist, { size: 16 });
+      btn('payAccept', X, 510, 230, 44, `🤝 ${L('成交', 'Accept')} $${p.offer}`, A.payAccept, { color: '#2a6f6a' });
+      btn('payMid', X, 558, 230, 44, `½ ${L('讓一半', 'Meet halfway')} $${mid}`, A.payMid, { enabled: !p.midTried, color: '#6b4226' });
+      btn('payInsist', X, 606, 230, 44, `✊ ${L('堅持', 'Insist')} $${p.price}${L('(可能氣走)', ' (risky)')}`, A.payInsist, { size: 16 });
       btn('refuse', X, 654, 230, 44, '不賣了', A.refuse, { color: '#4a4a4a' });
-    } else btn('payFull', X, 516, 230, 80, `收錢 $${p.price}${p.tip ? ` +小費${p.tip}` : ''}`, A.payFull, { color: '#2a6f6a', size: p.tip ? 20 : 26 });
+    } else btn('payFull', X, 516, 230, 80, `💰 ${L('收錢', 'Take')} $${p.price}${p.tip ? ` +${L('小費', 'tip ')}${p.tip}` : ''}`, A.payFull, { color: '#2a6f6a', size: p.tip ? 20 : 26 });
   }
 }
 
-function drawStation() { drawLeft(); drawTank(); drawRight(); drawHandAnim(); }
+function drawStation() { G._hint = null; drawLeft(); drawTank(); drawRight(); drawHandAnim(); if (G._hint) G._hint.tgt.forEach(([tx, ty]) => { if (tx > 0) arrowTo(tx, ty); }); }
 // v42:客人把鐵盆遞過來(從櫃台客人手上飛到盆位)
 function drawHandAnim() {
   const a = G.handAnim; if (!a) return;
@@ -943,30 +1060,50 @@ function drawHandAnim() {
     const ix = x + Math.cos(an) * (a.keys.length > 1 ? R * 0.4 : 0), iy = y + Math.sin(an) * (a.keys.length > 1 ? R * 0.32 : 0);
     if (im) { const sc = s2 / Math.max(im.width, im.height); ctx.drawImage(im, ix - im.width * sc / 2, iy - im.height * sc / 2, im.width * sc, im.height * sc); } });
   ctx.restore();
-  if (k < 1) text('客人遞鐵盆過來', x, y - R - 12, 13, '#ffe8a3', 'center');
+  
 }
 
 function bagBlock() {
-  if (!G.plate.length) return '盤子是空的:先撈起炸好的料';
-  if (!G.counter) return '還沒有客人,等客人來再裝袋';
-  if (G.counter.atCounter <= 0.6) return '客人還沒走到櫃台';
+  if (!G.plate.length) return L('盤子是空的:先撈起炸好的料', 'Plate is empty');
+  if (!G.counter) return L('還沒有客人,等客人來再裝袋', 'No guest yet');
+  if (G.counter.atCounter <= 0.6) return L('客人還沒走到櫃台', 'Guest not at counter yet');
   return '';
 }
+// v43:提示 = 圖示序列(seq)+ 短字 + 畫面上的彈跳箭頭(tgt)
+const ITEM_POS = k => { const i = MENU.indexOf(k); return [16 + (i % 2) * 118 + 56, 290 + Math.floor(i / 2) * 56]; };
+const BOWL_POS = bi => [14 + bi * 118 + 56, 514];
+const NET_POS = i => { const r = slotRect(i); return [r.x + r.w / 2, r.y + 6]; };
 function hint() {
-  if (G.phase !== 'open') return '';
-  const c = G.counter;
-  if (!c) return G.t >= G.dayLen ? '收攤囉!' : '等客人上門…客人會自己撿好一盆料交給你';
-  if (G.pay) return G.pay.offer < G.pay.price ? '客人在殺價:成交、讓價或堅持原價?' : '收錢!';
-  if (c.atCounter > 0.6 && shortItems(c).length) return '這單的料不夠了:道歉換單(沒小費、耐心-30%)或請客人離開';
-  if (c.sus && c.atCounter > 1) return '這包自備料看起來怪怪的…要幫他炸,還是檢舉?';
-  if (!c.handed) return c.waitBowl ? '兩個鐵盆都有料:先按鐵盆(V)下鍋,才能接這位客人的盆' : '客人正把自己撿好的鐵盆遞給你…';
-  { const ml = mustLeft(c); if (ml.length && !G.plate.length) return `客人要你補:${orderText(ml)} → 點左邊橘框的料加進盆裡,再按鐵盆(V)下鍋`; }
-  if (G.plate.length) return '點罐子灑胡椒鹽/辣粉、加九層塔,再按「裝袋」交給客人';
+  if (G.phase !== 'open') return null;
+  const c = G.counter, H = (t, seq = [], tgt = []) => ({ t, seq, tgt });
+  if (!c) return G.t >= G.dayLen ? H(L('收攤囉!', 'Closing!'), [['text', '🌙']]) : H(L('等客人上門', 'Waiting for guests'), [['text', '🚶'], ['arrow'], ['bowl']]);
+  if (G.pay) return G.pay.offer < G.pay.price ? H(L('殺價:成交/讓價/堅持', 'Haggle: accept / half / insist'), [['text', '🤏'], ['coin']], [[1149, 510]]) : H(L('收錢', 'Take the money'), [['coin']], [[1149, 516]]);
+  if (c.atCounter > 0.6 && shortItems(c).length) return H(L('料不夠:換單或請離開', 'Out of stock: swap or send away'), shortItems(c).map(k => ['food', k, 'short']));
+  if (c.sus && c.atCounter > 1) return H(L('自備料怪怪的?', 'Suspicious BYO?'), [['food', 'byo', 'self'], ['text', '🚨?']]);
+  if (!c.handed) return c.waitBowl ? H(L('先把盆下鍋', 'Pour a bowl first'), [['bowl'], ['arrow'], ['net']], [BOWL_POS(G.bowls.findIndex(b => b.items.length))]) : H('', [['text', '🚶'], ['arrow'], ['bowl']]);
+  { const ml = mustLeft(c); if (ml.length && !G.plate.length) return H(L('點橘框的料加進盆', 'Tap orange items to add'), countEnts(ml, 'need').map(e => ['food', e[0], 'need', e[1]]).concat([['arrow'], ['bowl']]), [ITEM_POS(ml[0])]); }
+  if (G.plate.length) return H(L('撒粉 → 裝袋', 'Season → bag'), [['jar', 'salt'], ['jar', 'spicy'], ['jar', 'basil'], ['arrow'], ['bag']], [[1149, 410], [1149, 522]]);
   const rd = G.fryer.findIndex((n, j) => n.length && G.baskets[j].inOil && netReady(n)), pr = G.bowls.findIndex(b => b.items.length);
-  if (rd >= 0) return `${rd + 1} 號網整網熟了 → 按 ${rd + 1} 或點網子,整網撈到盤上(空白鍵撈全部熟網)`;
-  if (pr >= 0) return `${pr + 1}號鐵盆撿好料了 → 點鐵盆(或按 V)倒進空網下鍋;右鍵鐵盆可退回`;
-  if (fried().length) return '整網共用一個熟度條:綠色時點網子整網撈起';
-  return '料都齊了 → 點鐵盆(V)下鍋';
+  if (rd >= 0) return H(L(`撈 ${rd + 1} 號網(空白鍵)`, `Lift basket ${rd + 1} (Space)`), [['check'], ['net'], ['text', '⬆'], ['text', '🍽']], [NET_POS(rd)]);
+  if (pr >= 0) return H(L('點鐵盆下鍋(V)', 'Tap bowl to pour (V)'), [['bowl'], ['arrow'], ['net']], [BOWL_POS(pr)]);
+  if (fried().length) return H(L('等綠色再撈', 'Lift when green'), [['raw'], ['arrow'], ['check'], ['text', '⬆']]);
+  return H(L('點鐵盆下鍋(V)', 'Tap bowl to pour (V)'), [['bowl'], ['arrow'], ['net']]);
+}
+function drawHint(h, x, cy) {
+  let xx = x; const S = 22;
+  h.seq.forEach(e => { const [k, a, b, n] = e;
+    if (k === 'text') { text(a, xx + S / 2, cy, 17, '#fff', 'center'); xx += S + 4; }
+    else if (k === 'arrow') { arrowSmall(xx, cy, 20); xx += 24; }
+    else if (k === 'bowl') { bowlIcon(xx + S / 2, cy, S); xx += S + 4; }
+    else if (k === 'net') { netIcon(xx + S / 2, cy, S); xx += S + 4; }
+    else if (k === 'bag') { bagIcon(xx + S / 2, cy, S + 4); xx += S + 4; }
+    else if (k === 'coin') { coinIcon(xx + S / 2, cy, S - 2); xx += S + 4; }
+    else if (k === 'jar') { jarIcon(a, xx + S / 2, cy, S + 2, true); xx += S; }
+    else if (k === 'check') { checkMark(xx + S / 2, cy, 9); xx += S; }
+    else if (k === 'raw') { ctx.fillStyle = '#4f7fa8'; ctx.beginPath(); ctx.arc(xx + S / 2, cy, 10, 0, 7); ctx.fill(); rawIcon(xx + S / 2, cy, 13); xx += S + 2; }
+    else if (k === 'food') { iconBadge(a, n || 1, xx + S / 2 + 2, cy, S, b); xx += S + 8 + (n > 1 ? 8 : 0); } });
+  if (h.t) text(h.t, xx + 10, cy, 14, '#ffe8a3', 'left', 'normal');
+  h.tgt.forEach(([tx, ty]) => { if (tx > 0) arrowTo(tx, ty); });
 }
 
 function drawRail() {
@@ -976,7 +1113,7 @@ function drawRail() {
   const mg = ctx.createLinearGradient(0, y0, 0, y0 + 10); mg.addColorStop(0, '#d9dde2'); mg.addColorStop(1, '#7d848c');
   ctx.fillStyle = mg; rr(RX + 6, y0, W - RX - 12, 10, 4); ctx.fill();
   const list = (G.counter ? [G.counter] : []).concat(G.queue);
-  if (!list.length) text('(菜單夾是空的 — 客人點單會夾在這裡)', (RX + W) / 2, 96, 15, '#9c8a72', 'center', 'normal');
+  if (!list.length) text(L('(菜單夾是空的 — 客人點單會夾在這裡)', '(order rail empty)'), (RX + W) / 2, 96, 15, '#9c8a72', 'center', 'normal');
   const now = performance.now() / 1000;
   ctx.save(); ctx.beginPath(); ctx.rect(RX, 36, W - RX, 106); ctx.clip();
   list.slice(0, 3).forEach((c, i) => {
@@ -996,24 +1133,23 @@ function drawRail() {
     ctx.save(); ctx.beginPath(); ctx.arc(x + 18, y + 18, 14, 0, 7); ctx.clip();
     if (im) ctx.drawImage(im, im.width * 0.28, im.height * 0.02, im.width * 0.44, im.width * 0.44, x + 4, y + 4, 28, 28); else { ctx.fillStyle = '#f6d5b5'; ctx.fillRect(x + 4, y + 4, 28, 28); }
     ctx.restore();
-    text(atC ? '櫃台' : `#${i + (G.counter ? 0 : 1)} 排隊`, x + 36, y + 12, 12, atC ? '#a67c00' : '#6c5a45');
-    text(CTYPES[c.type].label.slice(0, 6), x + 36, y + 26, 11, '#7a4b4b', 'left', 'normal');
+    text(atC ? L('櫃台', 'NOW') : `#${i + (G.counter ? 0 : 1)}`, x + 36, y + 12, 12, atC ? '#a67c00' : '#6c5a45');
     const sec = atC ? c.patience : c.patience / 0.4;
-    text(`⏱${Math.max(0, Math.ceil(sec))}s`, x + w - 6, y + 12, 12, col, 'right');
-    // 品項
+    text(`⏱${Math.max(0, Math.ceil(sec))}`, x + w - 6, y + 12, 12, col, 'right');
+    // v43 品項 = 圖示(一般=客人自己撿 · 橘色脈動＋=要你補 · 綠✓=補好 · 紅✗=缺貨)
     const short = shortItems(c);
-    if (c.type === 'regular' && !c.swapped && !c.handed) text('老樣子(看熟客筆記)', x + 6, y + 44, 12, '#2b1a0e');
-    else { // v42:✓ = 客人已撿進盆;橘底 ＋ = 老闆要補(攤家料/臨時加點),補好變綠 ✓
+    if (c.type === 'regular' && !c.swapped && !c.handed) { text('?', x + 40, y + 46, 18, '#2b1a0e'); arrowSmall(x + 56, y + 46); text('📒', x + 84, y + 46, 18, '#2b1a0e'); }
+    else {
       const ml = atC ? countBy(mustLeft(c)) : {}, addC = countBy(c.handed ? c.need : (c.order.add || []).concat(c.order.items.filter(k => ITEMS[k].vendor && !(c.order.add || []).includes(k))));
       const ents = []; const pc = countBy(c.order.items);
-      Object.keys(pc).forEach(kk => { const a = Math.min(pc[kk], addC[kk] || 0), sp = pc[kk] - a; if (sp) ents.push([kk, sp, 'self']); if (a) ents.push([kk, a, ml[kk] ? 'need' : c.handed && atC ? 'done' : 'need']); });
-      let xx = x + 6, yy = y + 42;
-      ents.forEach(([kk, n, st]) => { const t = `${st === 'need' ? '＋' : '✓'}${ITEMS[kk].name}${n > 1 ? '×' + n : ''}`; ctx.font = `bold 12px ${FONT}`; const tw = ctx.measureText(t).width + 8;
-        if (xx + tw > x + w - 4) { xx = x + 6; yy += 15; }
-        if (st === 'need') { ctx.fillStyle = '#ff9f1c'; rr(xx - 2, yy - 7, tw - 4, 14, 3); ctx.fill(); }
-        text(t, xx, yy, 12, short.includes(kk) ? '#d62828' : st === 'need' ? '#3a1600' : st === 'done' ? '#1f7a3f' : '#6c6c6c'); if (short.includes(kk)) { ctx.fillStyle = '#d62828'; ctx.fillRect(xx, yy, tw - 8, 1.5); } xx += tw; }); }
-    const tags = (c.type === 'regular' ? '?' : `${c.order.spicy ? '辣' : '不辣'}・${c.order.basil ? '塔' : '無塔'}`) + (c.type === 'byo' ? '・代炸' : '');
-    text(tags, x + 6, y + h - 14, 11, c.order.spicy && c.type !== 'regular' ? '#c1121f' : '#555');
+      Object.keys(pc).forEach(kk => { const a = Math.min(pc[kk], addC[kk] || 0), sp = pc[kk] - a; if (sp) ents.push([kk, sp, short.includes(kk) ? 'short' : 'self']); if (a) ents.push([kk, a, short.includes(kk) ? 'short' : ml[kk] ? 'need' : c.handed && atC ? 'done' : 'need']); });
+      const tot = sz => ents.reduce((t, e) => t + sz + (e[1] > 1 ? sz * 0.35 : 0) + 4, 0);
+      let s2 = 30; while (s2 > 16 && tot(s2) > w - 14) s2 -= 2;
+      iconRow(ents, x + 8, y + 50, s2, 4, w - 12);
+    }
+    if (c.type !== 'regular') { jarIcon('spicy', x + 12, y + h - 13, 18, c.order.spicy); jarIcon('basil', x + 32, y + h - 13, 18, c.order.basil); }
+    else text('?', x + 10, y + h - 14, 12, '#555');
+    if (c.type === 'byo') text('BYO', x + 46, y + h - 14, 9, '#7b5ea7');
     ctx.fillStyle = '#ddd'; ctx.fillRect(x + 70, y + h - 18, w - 76, 8); ctx.fillStyle = col; ctx.fillRect(x + 70, y + h - 18, (w - 76) * ratio, 8);
     ctx.restore();
   });
@@ -1114,8 +1250,9 @@ function drawResults(time) {
 }
 
 function drawVol() {
-  const S = window.SFX, lv = S ? S.level : 0, lab = !S || S.headless ? '🔇 靜音' : ['🔇 靜音', '🔈 小', '🔉 中', '🔊 大'][lv] + ' M';
+  const S = window.SFX, lv = S ? S.level : 0, lab = !S || S.headless ? L('🔇 靜音', '🔇 Mute') : [L('🔇 靜音', '🔇 Mute'), '🔈 1', '🔉 2', '🔊 3'][lv] + ' M';
   btn('vol', 1200, 6, 74, 32, lab, () => sfx('cycleVolume'), { color: '#3b5b92', size: 13, on: false });
+  btn('lang', 1130, 6, 64, 32, LANG === 'en' ? 'EN→中' : '中→EN', () => setLang(LANG === 'en' ? 'zh' : 'en'), { color: '#6b4226', size: 13 }); // v43 語言切換
 }
 function render(time) {
   buttons = [];
