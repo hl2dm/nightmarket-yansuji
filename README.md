@@ -1,3 +1,5 @@
+給 Grok Build 的改版說明見 [`GROK_BUILD.md`](GROK_BUILD.md)。目前可玩版本是 v44；v45 設計稿在 `redesign_v45/`。
+
 # 阿恩鹽酥雞 — 台灣夜市攤位系列 #1(v3.2)
 
 直接用瀏覽器開 `index.html` 即可(純 HTML5/JS,可放 GitHub Pages)。網址參數:`?seed=42`、`?speed=2`、`?autostart`。
