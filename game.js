@@ -1930,8 +1930,6 @@ function drawBowl(bi, B, x, y, w, h, cid) {
     else { ctx.fillStyle = ITEMS[it.key].color; ctx.beginPath(); ctx.arc(ix, iy, s / 3, 0, 7); ctx.fill(); } });
   ctx.restore();
   text(`#${bi + 1} · ${n}`, x + 6, y + 10, 12, sel ? '#ffd166' : '#d8c8b0', 'left');
-  if (n && B.cid === cid) { ctx.fillStyle = '#4cc9f0'; rr(x + w - 36, y + 3, 32, 15, 4); ctx.fill(); text(L('這單', 'NOW'), x + w - 20, y + 10.5, 10, '#06283d', 'center'); }
-  else if (n && B.cid) { ctx.fillStyle = '#888'; rr(x + w - 36, y + 3, 32, 15, 4); ctx.fill(); text(L('上一單', 'prev'), x + w - 20, y + 10.5, 9, '#fff', 'center'); }
   const cc = G.counter, mine = n && cc && cc.handed && B.cid === cc.id && !G.pay, ml = mine ? mustLeft(cc) : [];
   if (ml.length) { ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = G.mustFlash > 0 && Math.sin(performance.now() / 80) > 0 ? 5 : 3; rr(x, y, w, h, 10); ctx.stroke(); }
   // v43:還要補 = 橘色脈動圖示;齊了 = 盆→網 圖示
@@ -1957,29 +1955,15 @@ function drawTank() {
   ctx.fillStyle = old ? 'rgba(40,20,0,0.35)' : 'rgba(255,220,120,0.18)'; rr(X + 14, Y + F.head, TW - 28, F.oil - 4, 6); ctx.fill();
   }
   if (G.fullFlash > 0) { ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; rr(X + 2, Y + 2, TW - 4, TH - 4, 14); ctx.stroke(); }
-  const frac = clamp(G.oilUse / OIL_LIMIT, 0, 1);
-  const bx = X + 16, by = Y + 8, bw = TW - 32;
-  ctx.fillStyle = 'rgba(8,4,2,0.72)'; rr(bx, by, bw, 22, 6); ctx.fill();
-  ctx.fillStyle = old ? '#8a3030' : frac > 0.75 ? '#e07a1f' : '#2a6f6a';
-  if (frac > 0) { rr(bx, by, Math.max(10, bw * frac), 22, 6); ctx.fill(); }
-  text(old ? L(`老油 · 換 $${oilPrice()}`, `Old oil · $${oilPrice()}`) : L(`油 ${Math.round(frac * 100)}% · 換 $${oilPrice()}`, `Oil ${Math.round(frac * 100)}% · $${oilPrice()}`), bx + bw / 2, by + 11, 13, '#fff8e7', 'center');
   if (G.theme === 'blackout' && has('generator')) {
     const lx = X + 70, ly = Y + 36;
     const lg = ctx.createRadialGradient(lx, ly, 2, lx, ly, 80);
     lg.addColorStop(0, 'rgba(255,214,130,0.5)'); lg.addColorStop(1, 'rgba(255,214,130,0)');
     ctx.fillStyle = lg; ctx.fillRect(lx - 80, ly - 40, 160, 110);
   }
-  G.baskets.filter(b => b.locked).forEach(b => { const { x, y, w, h } = cellRect(b); const u = UPGRADES.find(q => q.id === b.up);
-    ctx.fillStyle = 'rgba(20,12,6,0.55)'; rr(x, y, w, h, 10); ctx.fill();
-    ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(255,230,180,0.4)'; ctx.lineWidth = 2; rr(x, y, w, h, 10); ctx.stroke(); ctx.setLineDash([]);
-    text(L('加購', 'Unlock'), x + w / 2, y + h / 2 - 8, 13, '#d8c8b0', 'center');
-    text(u ? `$${u.price}` : '', x + w / 2, y + h / 2 + 12, 12, '#a89a86', 'center', 'normal');
-    buttons.push({ id: 'lock_' + (b.up || ''), x, y, w, h, enabled: true, clickable: true, onClick: () => popup(L('收攤後到設備店加購', 'Buy it after close, at the gear shop'), x + w / 2, y - 8, '#ffd59a') }); });
   const cid = G.counter && !G.pay ? G.counter.id : -1;
   for (let i = 0; i < G.fryer.length; i++) if (!G.baskets[i].locked) drawSlot(i, G.fryer[i], now, cid);
   ctx.save();
-  const rackY = F.y + F.h + 8;
-  ctx.fillStyle = 'rgba(30,16,4,0.45)'; rr(F.x, rackY, F.w, 100, 10); ctx.fill();
   if (IMG.rackBoard) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.rackBoard, 344, 534, 604, 88); }
   const netI = IMG.smallNet || IMG.basketTop;
   for (let i = 0; i < 4; i++) {
@@ -2043,11 +2027,7 @@ function drawSlot(i, net, now, cid) {
   ctx.fillStyle = on ? 'rgba(20,10,4,0.28)' : 'rgba(20,10,4,0.12)'; rr(x, y, w, h, 10); ctx.fill();
   const netI = (big ? IMG.bigNet : IMG.smallNet) || IMG.basketTop;
   if (netI) { ctx.save(); ctx.globalAlpha = on ? 0.92 : 0.8; ctx.imageSmoothingEnabled = false; ctx.drawImage(netI, x, y, w, h); ctx.restore(); }
-  if (!on) {
-    const lab = b.kind === 'chicken' ? L('雞排', 'Cutlet') : (big ? L('肉', 'Meat') : L('菜', 'Veg'));
-    text(lab, x + w / 2, y + h * 0.78, big ? 15 : 12, 'rgba(255,236,210,0.45)', 'center');
-    finish(); return;
-  }
+  if (!on) { finish(); return; }
   const multi = big && net.length > 1, n = big ? (multi ? 2 : 1) : Math.max(1, net.length), cw = (w - 12) / (big && multi ? 2 : Math.max(1, net.length)), P = b.p || 0;
   net.forEach((it, j) => {
     const I = ITEMS[it.key];
@@ -2126,7 +2106,7 @@ function drawRight() {
       lg.addColorStop(0, 'rgba(255,186,70,0.28)'); lg.addColorStop(1, 'rgba(255,186,70,0)');
       ctx.fillStyle = lg; ctx.fillRect(well.x, well.y, well.w, well.h);
     }
-    if (!en) {
+    if (!en && !IMG.plateWell) {
       text(L('空盤', 'Empty'), well.x + well.w / 2, well.y + well.h / 2, 14, 'rgba(60,40,20,0.45)', 'center');
     }
     G.plate.forEach((it, i) => {
@@ -2317,12 +2297,12 @@ function drawRail() {
     rr(x, y + h - foodH, w, foodH, 4); ctx.stroke();
     const px = (c.hold > 0 ? -160 : (c.x == null ? -160 : c.x));
     drawBust(c, px - bust.w / 2, bust.y, bust.w, bust.h);
-    ctx.strokeStyle = '#2b1a0e'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(x + 8, y + h - foodH); ctx.lineTo(x + w - 8, y + h - foodH); ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(x + 10, y + h - foodH - 4, w - 20, 3);
+    ctx.fillStyle = col;
+    ctx.fillRect(x + 10, y + h - foodH - 4, (w - 20) * ratio, 3);
     ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][i] || '#5c636a';
-    rr(x + 6, y + 6, 20, 16, 3); ctx.fill();
-    text(String(i + 1), x + 16, y + 14, 12, '#fff', 'center');
-    text(`${Math.max(0, Math.ceil(c.patience))}${L('秒', 's')}`, x + w - 8, y + 16, 12, col, 'right');
+    ctx.fillRect(x + 2, y + h - foodH + 3, 4, foodH - 6);
     const short = shortItems(c);
     const stuck = atC && short.length && !orderHeld(c) && !fillableLeft(c).length;
     const fy = y + h - foodH / 2;
