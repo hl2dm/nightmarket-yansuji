@@ -304,6 +304,12 @@ function newNight() { refreshMenu(G.night);
     G.forkId = bag[Math.floor(rng() * bag.length)].id;
   }
   buildSchedule();
+  if (G.night === 1) {
+    const gift = { chicken: 2, tempura: 2, bean: 2 };
+    const have = ALL_MENU.reduce((a, k) => a + ((G.inv[k] && G.inv[k].fresh) || 0) + ((G.inv[k] && G.inv[k].old) || 0), 0);
+    if (!have) Object.keys(gift).forEach(k => { if (G.inv[k]) G.inv[k].fresh += gift[k]; });
+  }
+  G.creditWarned = false;
 }
 // ---- 存檔 ----
 function saveGame() {
@@ -474,12 +480,16 @@ function priceTrend() {
   const vs = Math.round((1 + (vegIndex(n) - 1) * 0.65) * 100), ms = Math.round((1 + (meatIndex(n) - 1) * 0.65) * 100);
   return L(`物價比第 1 週：菜進價 ${vc}%／售價 ${vs}% · 肉進價 ${mc}%／售價 ${ms}%`, `Vs week 1: veg cost ${vc}% / sell ${vs}% · meat cost ${mc}% / sell ${ms}%`);
 }
-function batchCost(k) { return Math.round(unitCost(k) * STOCK[k].batch); }
-function rescueCost(k) { return Math.round(unitCost(k, true) * STOCK[k].batch * 1.6); }
+function batchQty(k) {
+  const n = STOCK[k] ? STOCK[k].batch : 1;
+  return G && G.night === 1 ? Math.max(2, Math.ceil(n / 2)) : n;
+}
+function batchCost(k) { return Math.round(unitCost(k) * batchQty(k)); }
+function rescueCost(k) { return Math.round(unitCost(k, true) * batchQty(k) * 1.6); }
 
 function guestQuota() {
-  // 人數跟口碑走。口碑 0 約 6 位，100 約 14 位。第一週固定 5 位，用來學。
-  if (G.night === 1) return 5;
+  // 人數跟口碑走。口碑 0 約 6 位，100 約 14 位。第一週 8 位，才吃得完半批進貨。
+  if (G.night === 1) return 8;
   let n = 6 + Math.round(clamp(G.rep, 0, 100) / 100 * 8);
   if (has('neon')) n += 2;
   if (hasBoon('loud')) n += 1;
@@ -568,7 +578,12 @@ function spawn(type) {
 // ---------- 工具 ----------
 function addLog(zh, en) { G.log.push({ t: clockStr(), zh, en: en || zh }); }
 function logText(l) { if (!l) return ''; return typeof l === 'string' ? l : `[${l.t}] ${L(l.zh, l.en)}`; }
-function popup(text, x, y, color = '#ffd166') { G.popups.push({ text, x, y, color, life: 1.6 }); }
+function popup(text, x, y, color = '#ffd166') {
+  const near = G.popups.filter(p => Math.hypot(p.x - x, p.y - y) < 90);
+  const same = near.find(p => p.text === text);
+  if (same) { same.life = 1.6; return; }
+  G.popups.push({ text, x, y: y - near.length * 26, color, life: 1.6 });
+}
 function puff(x, y) { for (let i = 0; i < 7; i++) G.particles.push({ x, y, vx: rand(-90, 90), vy: rand(-110, -16), life: 0.32, r: rand(2, 4), c: 'rgba(255,214,120,0.85)' }); }
 function changeRep(d) { G.rep = clamp(G.rep + d, 0, 100); }
 function clockStr() { const m = 18 * 60 + Math.floor(G.t / G.dayLen * 300); return `${Math.floor(m / 60) % 24}:${String(m % 60).padStart(2, '0')}`; }
@@ -603,17 +618,31 @@ const A = {
   buy(k, n) {
     if (n > 0 && k === G.ban) { popup(L(`${NM(k)} 本週進不到`, `${NM(k)} is unavailable`), 640, 360, '#ff6b6b'); return; }
     const c = batchCost(k), v = G.inv[k];
-    if (n > 0) { if (G.cash < c) { popup(L('現金不夠', 'Not enough cash'), 640, 360, '#ff6b6b'); return; } if (v.fresh + v.old + STOCK[k].batch > MAX_STOCK) { popup(L('冰櫃放不下了', 'Fridge is full'), 640, 360, '#ff6b6b'); return; }
-      G.cash -= c; v.fresh += STOCK[k].batch; G.stats.buy += c; G.buyLog[k] = (G.buyLog[k] || 0) + 1; }
-    else { if (!G.buyLog[k] || v.fresh < STOCK[k].batch) return; G.cash += c; v.fresh -= STOCK[k].batch; G.stats.buy -= c; G.buyLog[k]--; }
+    if (n > 0) { if (G.cash < c) { popup(L('現金不夠', 'Not enough cash'), 640, 360, '#ff6b6b'); return; } if (v.fresh + v.old + batchQty(k) > MAX_STOCK) { popup(L('冰櫃放不下了', 'Fridge is full'), 640, 360, '#ff6b6b'); return; }
+      G.cash -= c; v.fresh += batchQty(k); G.stats.buy += c; G.buyLog[k] = (G.buyLog[k] || 0) + 1; }
+    else { if (!G.buyLog[k] || v.fresh < batchQty(k)) return; G.cash += c; v.fresh -= batchQty(k); G.stats.buy -= c; G.buyLog[k]--; }
   },
-  open() { G.phase = 'open'; G.t = 0; const arc = (typeof NIGHT_ARC !== 'undefined') ? NIGHT_ARC[(G.night - 1) % NIGHT_ARC.length] : null; addLog(`第 ${G.night} 週開攤!進貨花了 $${G.stats.buy}`, `Week ${G.night} open. Stock cost $${G.stats.buy}`); if (arc) addLog(arc[0], arc[1]); const nt = noticeNow(); if (nt.id !== 'quiet') { const src = newsSource(nt); const line = effectLine(nt); addLog(`${src.zh}：${nt.zh}`, `${src.en}: ${nt.en}`); G.lastLine = { who: src.zh, whoEn: src.en, text: line, textZh: line, textEn: nt.enLine || line, t: 7 }; } },
+  open() {
+    const tot = MENU.reduce((a, k) => a + (G.inv[k] ? G.inv[k].fresh + G.inv[k].old : 0), 0);
+    const canBuy = MENU.some(k => k !== G.ban && G.cash >= batchCost(k));
+    if (!tot && !canBuy) {
+      if (!G.creditWarned) {
+        G.creditWarned = true;
+        popup(L('沒有料，現金也不夠。再按一次會賒一批雞排。', 'No stock and no cash. Press again to take chicken on credit.'), 640, 360, '#ffb703');
+        return;
+      }
+      const k = 'chicken', c = batchCost(k);
+      G.debt += c; G.inv[k].fresh += batchQty(k); G.stats.buy += c; G.creditWarned = false;
+      addLog(`賒進 ${ITEMS[k].name} ${batchQty(k)} 份，欠 $${c}`, `Chicken on credit, ${batchQty(k)}, owe $${c}`);
+    }
+    G.phase = 'open'; G.t = 0; const arc = (typeof NIGHT_ARC !== 'undefined') ? NIGHT_ARC[(G.night - 1) % NIGHT_ARC.length] : null; addLog(`第 ${G.night} 週開攤!進貨花了 $${G.stats.buy}`, `Week ${G.night} open. Stock cost $${G.stats.buy}`); if (arc) addLog(arc[0], arc[1]); const nt = noticeNow(); if (nt.id !== 'quiet') { const src = newsSource(nt); const line = effectLine(nt); addLog(`${src.zh}：${nt.zh}`, `${src.en}: ${nt.en}`); G.lastLine = { who: src.zh, whoEn: src.en, text: line, textZh: line, textEn: nt.enLine || line, t: 7 }; }
+  },
   rescue(k) {
     if (G.phase !== 'open' || G.rescueUsed || !STOCK[k] || stockOf(k) > 0) return;
     const c = rescueCost(k);
     if (G.cash < c) { popup(`${NM(k)} ${L('補貨要', 'restock ')}$${c}`, 160, 400, '#ff6b6b'); return; }
-    G.cash -= c; G.inv[k].fresh += STOCK[k].batch; G.rescueUsed = true; G.stats.buy += c;
-    popup(`${NM(k)} +${STOCK[k].batch}`, 160, 360, '#ffd166');
+    G.cash -= c; G.inv[k].fresh += batchQty(k); G.rescueUsed = true; G.stats.buy += c;
+    popup(`${NM(k)} +${batchQty(k)}`, 160, 360, '#ffd166');
     addLog(`表弟緊急補貨 ${ITEMS[k].name} -$${c}`, `Cousin restock ${ITEMS[k].en || ITEMS[k].name} −$${c}`); sfx('cash');
   },
   buyUpgrade(id) {
@@ -929,7 +958,7 @@ function settle() {
   if (G.season.spicy && o.spicy) lines.push(['辣粉', seasonPrice('spicy'), 'jar:spicy']);
   if (G.season.basil && o.basil) lines.push(['九層塔', seasonPrice('basil'), 'jar:basil']);
   const specN = served.filter(it => it.key === G.special && it.d >= ITEMS[it.key].lo && it.d <= ITEMS[it.key].hi).length;
-  if (specN) lines.push([L('今日特餐', 'Tonight special'), specBonus() * specN, G.special]);
+  if (specN) lines.push([L('今日特餐', 'Tonight special'), specBonus() * specN, 'spec']);
   if (G.notice === 'lantern' && sat >= 80 && served.length) lines.push([L('燈節', 'Lantern'), 15, 'lantern']);
   const nt = noticeNow();
   if (nt.tip && sat >= 80 && served.length) lines.push([L(nt.zh, nt.en), nt.tip, nt.id]);
@@ -988,7 +1017,8 @@ function finishPay(amount) {
   if (p.sat >= 80) { changeRep(1.5 + (hasBoon('saint') ? 1 : 0)); G.stats.happy++; } else if (p.sat >= 50) changeRep(0.5); else { changeRep(-2 - (hasBoon('saint') ? 1 : 0)); G.stats.angry++; }
   if (c.type === 'regular' && p.sat >= 80) changeRep(1);
   if (c.sus && G.lastServed.some(it => it.key === 'byo')) { G.pendingSick = true; }
-  addLog(`${CTYPES[c.type].label} 付 $${amount}${tip ? ' + 小費' + tip : ''},滿意度 ${p.sat}`, `${CTYPES[c.type].en} paid $${amount}${tip ? ' + tip ' + tip : ''}, mood ${p.sat}`);
+  const who = c.type === 'inspector' && c.revealed ? L('稽查員', 'Inspector') : L(CTYPES[c.type].label, CTYPES[c.type].en);
+  addLog(`${who} 付 $${amount}${tip ? ' + 小費' + tip : ''},滿意度 ${p.sat}`, `${who} paid $${amount}${tip ? ' + tip ' + tip : ''}, mood ${p.sat}`);
   markLesson('pay');
   leave(c, c.line, false, c.lineEn);
   resetPrep();
@@ -1159,8 +1189,9 @@ function endDay() {
   if (G.cash >= due) { G.cash -= due; G.debt = 0; G.debtStrikes = 0; s.paid = due; }
   else { s.paid = Math.max(0, G.cash); G.debt = due - s.paid; G.cash = 0; G.debtStrikes++; addLog(`付不出本週房租,欠 $${G.debt}`, `Could not cover this week's rent. Owe $${G.debt}`); }
   s.net = G.cash - G.debt - (G.cashStart - G.debtStart);
-  const bar = G.rent || 300;
-  s.grade = s.served === 0 ? 'C' : s.net >= bar * 0.45 ? 'S' : s.net >= 0 ? 'A' : s.net >= -bar * 0.5 ? 'B' : 'C';
+  const graded = nightGrade(s);
+  s.grade = graded.g;
+  s.gradeWhy = graded.why;
   if (!G.marks) G.marks = {};
   if (!G.gameOver && !G.marks.half && G.cash >= STALL_PRICE / 2) { G.marks.half = 1; addLog('現金過了買斷的一半。房租每週還是會來。', 'Past halfway to the buyout. Rent still comes every week.'); }
   if (!G.gameOver && !G.marks.near && G.cash >= STALL_PRICE * 0.85 && G.cash < STALL_PRICE) { G.marks.near = 1; addLog('再一週好生意，就夠把攤子買下來。', 'One good week and you can buy the stall.'); }
@@ -1257,7 +1288,36 @@ function ticketRect() { return cardGeom(0); }
 function plateRect() { return { x: 988, y: 328, w: 272, h: 112 }; }
 function guestRect() { const g = cardGeom(0); return { x: g.x, y: g.y, w: g.w, h: g.h - 30 }; }
 function guestCardRect() { return cardGeom(0); }
-function billAnchor() { return { x: 1124, y: 470 }; }
+function nightGrade(s) {
+  const served = s.served || 0, lost = s.lost || 0, happy = s.happy || 0, angry = s.angry || 0;
+  const seen = served + lost;
+  if (!seen) return { g: 'C', why: 'empty' };
+  const happyRate = served ? happy / served : 0;
+  const angryRate = served ? angry / served : 0;
+  const lostRate = lost / seen;
+  const waste = (s.waste || 0) + (s.spoil || 0);
+  const wasteHeavy = waste > Math.max(80, (s.revenue || 0) * 0.5);
+  let g = 'B', why = 'ok';
+  if (lostRate >= 0.45 || angryRate >= 0.5) { g = 'C'; why = lostRate >= angryRate ? 'lost' : 'angry'; }
+  else if (happyRate >= 0.8 && lostRate <= 0.15 && angry === 0) { g = wasteHeavy ? 'A' : 'S'; why = wasteHeavy ? 'waste' : 'happy'; }
+  else if (happyRate >= 0.55 && lostRate <= 0.3) { g = wasteHeavy ? 'B' : 'A'; why = wasteHeavy ? 'waste' : 'ok'; }
+  else { g = 'B'; why = lostRate >= 0.25 ? 'lost' : 'ok'; }
+  if (g !== 'C' && (lostRate >= 0.4 || angryRate >= 0.4)) { g = 'C'; why = lostRate >= angryRate ? 'lost' : 'angry'; }
+  return { g, why };
+}
+function billRows(lines) {
+  const rows = [];
+  (lines || []).forEach(([nm, v, key]) => {
+    key = key || nm;
+    if (ITEMS[key]) {
+      const hit = rows.find(q => q.key === key && q.v === v);
+      if (hit) hit.n++;
+      else rows.push({ key, v, n: 1, nm: NM(key), item: true });
+    } else rows.push({ key, v, n: 1, nm, item: false });
+  });
+  return rows;
+}
+function billAnchor() { return { x: 900, y: 500 }; }
 function cashboxRect() { return { x: 988, y: 640, w: 272, h: 48 }; }
 function rackRect(i) {
   const F = fryFrame();
@@ -1944,6 +2004,32 @@ function slotState(it) {
   if (it.d <= I.hi) return { lab: '剛好!', col: '#21b36b', fg: '#eafff2', ready: true };
   { const t = clamp((it.d - I.hi) / Math.max(1, 100 - I.hi), 0, 1); return { lab: '快焦!', col: `rgb(${Math.round(240 - 20 * t)},${Math.round(140 - 100 * t)},${Math.round(40)})`, fg: '#ffe0d6', warn: true }; }
 }
+function drawFryLife(x, y, w, h, net, now) {
+  if (!net.length) return;
+  const maxD = Math.max(...net.map(it => it.d));
+  const burnt = net.some(it => it.d >= 100);
+  ctx.save();
+  if (!burnt) {
+    const bubbles = 3 + Math.floor(clamp(maxD, 0, 80) / 20);
+    ctx.strokeStyle = 'rgba(255,246,210,0.8)'; ctx.lineWidth = 1;
+    for (let i = 0; i < bubbles; i++) {
+      const px = x + 12 + ((i * 41 + Math.floor(now * 24)) % Math.max(8, w - 24));
+      const ph = (now * 26 + i * 13) % (h * 0.5);
+      ctx.globalAlpha = 0.35 + (i % 3) * 0.12;
+      ctx.beginPath(); ctx.arc(px, y + h - 10 - ph, 1.5 + (i % 3), 0, 7); ctx.stroke();
+    }
+  }
+  if (maxD > 72 || burnt) {
+    const puffs = burnt ? 4 : 3;
+    ctx.fillStyle = burnt ? 'rgba(28,28,28,0.8)' : 'rgba(220,214,204,0.7)';
+    for (let i = 0; i < puffs; i++) {
+      const rise = (now * (burnt ? 24 : 16) + i * 11) % (burnt ? 40 : 26);
+      ctx.globalAlpha = burnt ? 0.55 : 0.32;
+      ctx.beginPath(); ctx.arc(x + w * 0.28 + i * (w * 0.16), y + 10 - rise, (burnt ? 6 : 4) + (i % 2), 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
 function netReady(net) { const g = net.filter(it => it.d < 100); return net.some(it => it.d >= 100) || (g.length && g.every(it => it.d >= ITEMS[it.key].lo)); }
 function drawSlot(i, net, now, cid) {
   const b = G.baskets[i], big = b.s === 'L', { x, y, w, h } = slotRect(i), on = net.length > 0;
@@ -1969,7 +2055,7 @@ function drawSlot(i, net, now, cid) {
     const rawI = IMG['raw_' + it.key], frI = IMG['fr_' + it.key], fim = IMG['f_' + (IMG_ALIAS[it.key] || it.key)], k = clamp(it.d / 100, 0, 1);
     const fit = (im, a, flt) => { if (!im) return; ctx.save(); ctx.globalAlpha = a; if (flt) ctx.filter = flt; blitFood(im, cx - s / 2, cy - s / 2, s, s, false); ctx.restore(); };
     if (rawI && frI) { if (it.d >= 100) fit(IMG.burnt || frI, 1, IMG.burnt ? '' : 'brightness(0.2)');
-      else { const m = clamp(it.d / I.lo, 0, 1); fit(rawI, 1 - m * 0.85); if (m > 0) {
+      else { const m = clamp((it.d - I.lo * 0.45) / Math.max(8, I.lo * 0.55), 0, 1); fit(rawI, 1 - m * 0.85); if (m > 0) {
         const over = it.d > I.hi ? clamp((it.d - I.hi) / Math.max(8, 100 - I.hi), 0, 1) : 0;
         const hot = it.d >= I.lo && it.d <= I.hi;
         fit(frI, Math.max(m, hot ? 1 : m), over ? `brightness(${1 - 0.72 * over}) sepia(${0.25 + 0.5 * over}) saturate(${1.1 - 0.7 * over})` : hot ? 'saturate(1.25) brightness(1.05)' : '');
@@ -1977,6 +2063,7 @@ function drawSlot(i, net, now, cid) {
     else if (fim) { ctx.save(); ctx.filter = it.d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${1.25 - 0.55 * k}) saturate(${0.7 + 0.5 * k})`; ctx.drawImage(fim, cx - s / 2, cy - s / 2, s, s); ctx.restore(); }
     else { ctx.fillStyle = I.color; ctx.beginPath(); ctx.arc(cx, cy, s / 3, 0, 7); ctx.fill(); }
   });
+  drawFryLife(x, y, w, h, net, now);
   if (b.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.55, b.flash * 1.6); ctx.fillStyle = '#fff2b0'; rr(x, y, w, h, 10); ctx.fill(); ctx.restore(); }
   const who = railCustomers().findIndex(cu => net[0] && cu.id === net[0].cid);
   if (who >= 0) { ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][who]; rr(x + 6, y + 6, 18, 16, 4); ctx.fill(); text(String(who + 1), x + 15, y + 14, 12, '#fff', 'center'); }
@@ -2086,18 +2173,19 @@ function drawRight() {
     ctx.beginPath(); rr(paper.x, paper.y, paper.w, paper.h, 6); ctx.clip();
     ctx.fillStyle = '#fbf6e9'; ctx.fillRect(paper.x, paper.y, paper.w, paper.h);
     text(L('收據', 'Bill'), X + 10, paper.y + 16, 15, '#7a4b00');
-    const LL = [];
-    (p.lines || []).forEach(([nm, v, key]) => { key = key || nm; const e = LL.find(q => q[0] === key); if (e) e[2]++; else LL.push([key, v, 1]); });
+    const LL = billRows(p.lines);
     const lh = LL.length > 5 ? 15 : 18;
     let shown = 0;
-    LL.forEach(([key, v, n]) => {
+    LL.forEach(row => {
       const cy2 = paper.y + 38 + shown * lh;
       if (cy2 > paper.y + paper.h - 28) return;
       shown++;
-      if (key.startsWith('jar:')) jarIcon(key.slice(4), X + 16, cy2, lh, true);
-      else foodIcon(key, X + 16, cy2, lh + 2);
-      text(`×${n}  $${v}`, X + 30, cy2, 12, '#2b1a0e', 'left', 'normal');
-      text(`$${v * n}`, paper.x + paper.w - 12, cy2, 13, '#2b1a0e', 'right');
+      if (String(row.key).startsWith('jar:')) jarIcon(row.key.slice(4), X + 16, cy2, lh, true);
+      else if (row.item) foodIcon(row.key, X + 16, cy2, lh + 2, true);
+      const label = row.item ? `${row.nm} ×${row.n}` : row.nm;
+      const sum = row.item ? row.v * row.n : row.v;
+      text(oneLine(`${label}  $${row.item ? row.v : sum}`, 150, 12), X + 30, cy2, 12, '#2b1a0e', 'left', 'normal');
+      text(`$${sum}`, paper.x + paper.w - 12, cy2, 13, '#2b1a0e', 'right');
     });
     const foot = paper.y + paper.h - 14;
     ctx.fillStyle = '#c9b89a'; ctx.fillRect(X + 8, foot - 12, paper.w - 16, 1);
@@ -2248,7 +2336,17 @@ function drawRail() {
       const addSrc = c.handed ? (c.need || []) : (c.order.add || []).concat(c.order.items.filter(k => ITEMS[k].vendor && !(c.order.add || []).includes(k)));
       const addC = countBy(addSrc);
       const ents = []; const pc = countBy(c.order.items);
+      const paying = !!(G.pay && atC);
+      const servedN = {};
+      if (paying) (G.pay.lines || []).forEach(([, , key]) => { if (ITEMS[key]) servedN[key] = (servedN[key] || 0) + 1; });
       Object.keys(pc).forEach(kk => {
+        if (paying) {
+          const got = Math.min(pc[kk], servedN[kk] || 0);
+          const miss = pc[kk] - got;
+          if (got) ents.push([kk, got, 'done']);
+          if (miss) ents.push([kk, miss, 'short']);
+          return;
+        }
         const a = Math.min(pc[kk], addC[kk] || 0), sp = pc[kk] - a;
         if (sp) ents.push([kk, sp, short.includes(kk) ? 'short' : 'self']);
         if (a) ents.push([kk, a, short.includes(kk) ? 'short' : (ml[kk] ? 'need' : (c.handed ? 'done' : 'need'))]);
@@ -2343,9 +2441,9 @@ function drawStock(time) {
   const enR = (typeof RUMOR_EN !== 'undefined' && RUMOR_EN[G.rumorId]) || G.rumor;
   text(oneLine(L(`耳語：${G.rumor}`, `Rumor: ${enR}`), 620, 12), 560, 96, 12, '#c9b59a', 'left', 'normal');
   infoBar(118);
-  const hd = LANG === 'en' ? ['Item', 'Batch', 'Cost', 'Price', 'Keep', 'Fresh / old', '', 'Bought'] : ['食材', '一批', '進價/批', '售價/份', '保存', '庫存(新鮮/隔夜)', '', '今晚進了'];
+  const hd = LANG === 'en' ? ['Item', 'Batch', 'Cost', 'Price', 'Keep', 'Fresh / old', '', 'Bought'] : ['食材', '一批', '進價/批', '售價/份', '保存', '庫存(新鮮/上週)', '', '本週進了'];
   const cx = [60, 300, 390, 500, 600, 700, 900, 1080];
-  const keep = days => days >= 2 ? L(`${days} 晚`, `${days}n`) : L('當晚', 'Tonight');
+  const keep = days => days >= 2 ? L(`保存 ${days} 週`, `keeps ${days} wk`) : L('當週用掉', 'this week');
   if (MENU.length <= 7) hd.forEach((h, i) => text(h, cx[i], 142, 14, '#bba'));
   else text(L('新料逐晚解鎖 · 橘=肉（大網） 綠=菜（小網）', 'New items unlock nightly · orange = meat (big net)  green = veg (small net)'), 60, 142, 14, '#bba', 'left', 'normal');
   MENU.forEach((k, r) => {
@@ -2355,12 +2453,12 @@ function drawStock(time) {
       ctx.fillStyle = meat ? 'rgba(224,122,31,0.16)' : 'rgba(58,154,74,0.14)'; rr(X, y - 23, 588, 46, 8); ctx.fill();
       if (k === G.deal) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; rr(X, y - 23, 588, 46, 8); ctx.stroke(); }
       const fim = foodImg(k, false); if (fim) blitFood(fim, X + 6, y - 20, 40, 40, true); catBadge(X + 44, y - 14, 7, meat);
-      text(NM(k), X + 56, y - 7, LANG === 'en' ? 14 : 17); text(`$${batchCost(k)}/${st.batch}${costTag(k)} · ${L('售', 'sell')} $${salePrice(k)}`, X + 56, y + 12, 12, k === G.deal || k === G.glut ? '#b7f5c5' : (G.notice === 'spike' && meat ? '#ffb4a2' : '#ffd166'), 'left', 'normal');
+      text(NM(k), X + 56, y - 7, LANG === 'en' ? 14 : 17); text(`$${batchCost(k)}/${batchQty(k)}${costTag(k)} · ${L('售', 'sell')} $${salePrice(k)}`, X + 56, y + 12, 12, k === G.deal || k === G.glut ? '#b7f5c5' : (G.notice === 'spike' && meat ? '#ffb4a2' : '#ffd166'), 'left', 'normal');
       const days = has('fridge') ? 2 : st.days; text(keep(days), X + 250, y, 14, days >= 2 ? '#b7e4c7' : '#ff9f80');
       text(`${v.fresh} / ${v.old}`, X + 320, y, 17, v.fresh + v.old ? '#fff' : '#ff6b6b');
       btn('unbuy_' + k, X + 390, y - 18, 50, 36, '−', () => A.buy(k, -1), { enabled: !!G.buyLog[k], color: '#6b4226', size: 20 });
       if (k === G.ban) text(L('本週缺', 'none'), X + 470, y, 14, '#ff8b8b');
-      else btn('buy_' + k, X + 446, y - 18, 80, 36, `+${st.batch}`, () => A.buy(k, 1), { enabled: G.cash >= batchCost(k), color: '#2a6f6a', size: 16 });
+      else btn('buy_' + k, X + 446, y - 18, 80, 36, `+${batchQty(k)}`, () => A.buy(k, 1), { enabled: G.cash >= batchCost(k), color: '#2a6f6a', size: 16 });
       text(G.buyLog[k] ? `${G.buyLog[k]}` : '—', X + 556, y, 16, '#ffd166', 'center');
       return; }
     const y = 180 + r * 54;
@@ -2368,18 +2466,18 @@ function drawStock(time) {
     if (k === G.deal) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; rr(46, y - 25, 1188, 52, 8); ctx.stroke(); }
     const fim = foodImg(k, false); if (fim) blitFood(fim, 58, y - 22, 44, 44, true);
     text(NM(k), 116, y, 20); if (I.vendor) text(L('攤家', 'House'), 116, y + 18, 11, '#ff9f80', 'left', 'normal');
-    text(L(`${st.batch} 份`, `×${st.batch}`), cx[1], y, 17); text(`$${batchCost(k)}${costTag(k)}`, cx[2], y, 17, k === G.deal || k === G.glut ? '#b7f5c5' : (G.notice === 'spike' && meat ? '#ffb4a2' : '#ffd166')); text(`$${salePrice(k)}`, cx[3], y, 17, '#b7e4c7');
+    text(L(`${batchQty(k)} 份`, `×${batchQty(k)}`), cx[1], y, 17); text(`$${batchCost(k)}${costTag(k)}`, cx[2], y, 17, k === G.deal || k === G.glut ? '#b7f5c5' : (G.notice === 'spike' && meat ? '#ffb4a2' : '#ffd166')); text(`$${salePrice(k)}`, cx[3], y, 17, '#b7e4c7');
     const days = has('fridge') ? 2 : st.days; text(keep(days), cx[4], y, 17, days >= 2 ? '#b7e4c7' : '#ff9f80');
     text(`${v.fresh} / ${v.old}`, cx[5], y, 20, v.fresh + v.old ? '#fff' : '#ff6b6b');
-    if (v.old && !has('fridge')) text(L('隔夜料滿意度 -8', 'Day-old, mood −8'), cx[5] + 70, y, 12, '#ffb703', 'left', 'normal');
+    if (v.old && !has('fridge')) text(L('上週料滿意度 -8', 'Last week’s stock, mood −8'), cx[5] + 70, y, 12, '#ffb703', 'left', 'normal');
     btn('unbuy_' + k, cx[6], y - 20, 60, 40, '−', () => A.buy(k, -1), { enabled: !!G.buyLog[k], color: '#6b4226', size: 22 });
     if (k === G.ban) text(L('本週缺', 'none'), cx[6] + 120, y, 16, '#ff8b8b');
-    else btn('buy_' + k, cx[6] + 70, y - 20, 100, 40, `+${st.batch}`, () => A.buy(k, 1), { enabled: G.cash >= batchCost(k), color: '#2a6f6a', size: 18 });
+    else btn('buy_' + k, cx[6] + 70, y - 20, 100, 40, `+${batchQty(k)}`, () => A.buy(k, 1), { enabled: G.cash >= batchCost(k), color: '#2a6f6a', size: 18 });
     text(G.buyLog[k] ? L(`${G.buyLog[k]} 批`, `${G.buyLog[k]}`) : '—', cx[7], y, 18, '#ffd166');
   });
   const est = G.schedule.length;
   const tot = MENU.reduce((a, k) => a + G.inv[k].fresh + G.inv[k].old, 0);
-  text(L(`今晚 ${est} 位（口碑 ${Math.round(G.rep)}，越高人越多）。備料 ${tot} 份。沒人了就收攤。`, `Tonight ${est} guests (rep ${Math.round(G.rep)}: higher brings more). ${tot} portions. An empty stall closes.`), 60, 578, 16, '#f3e6d0', 'left', 'normal');
+  text(L(`本週 ${est} 位（口碑 ${Math.round(G.rep)}，越高人越多）。備料 ${tot} 份。沒人了就收攤。`, `This week ${est} guests (rep ${Math.round(G.rep)}: higher brings more). ${tot} portions. An empty stall closes.`), 60, 578, 16, '#f3e6d0', 'left', 'normal');
   text(oneLine(priceTrend(), 1160, 14), 60, 552, 14, '#ffd59a', 'left', 'normal');
   text(L('營業中某種料賣完，可點紅字「補」叫表弟送一次，比批發貴。', 'If something sells out mid-shift, tap the red + once. Cousin charges more than wholesale.'), 60, 606, 14, '#bba', 'left', 'normal');
   btn('open', 980, 632, 240, 56, L('開攤', 'Open'), A.open, { size: 24 });
@@ -2389,7 +2487,7 @@ function drawShop(time) {
   drawBackground(time, 'shop_upgrade');
   wood(30, 20, 1220, 680);
   text(L('阿伯的二手設備店', "Uncle's used-gear shop"), 60, 52, 28, '#ffcf6b');
-  text(L(`每晚最多 ${MAX_UPGRADES_PER_NIGHT} 項 · 今晚已買 ${G.boughtTonight}`, `Max ${MAX_UPGRADES_PER_NIGHT} a night · bought ${G.boughtTonight}`), 1220, 52, 15, '#ffd59a', 'right');
+  text(L(`每週最多 ${MAX_UPGRADES_PER_NIGHT} 項 · 本週已買 ${G.boughtTonight}`, `Max ${MAX_UPGRADES_PER_NIGHT} a week · bought ${G.boughtTonight}`), 1220, 52, 15, '#ffd59a', 'right');
   infoBar(96);
   text(oneLine(L(`下週房租 $${weekRent(G.night + 1)}${G.debt ? ` + 還欠款 $${Math.round(G.debt * 1.2)}` : ''}。二手價跟買斷價都不漲。`, `Next week's rent $${weekRent(G.night + 1)}${G.debt ? ` + debt $${Math.round(G.debt * 1.2)}` : ''}. Used gear and the buyout do not inflate.`), 1100, 15), 60, 128, 15, '#ff9f80', 'left', 'normal');
   const owned = (G.boons || []).map(id => { const b = boonBy(id); return b ? L(b.zh, b.en) : id; });
@@ -2424,7 +2522,7 @@ function drawResults(time) {
   const rows = [[L('營收', 'Sales'), s.revenue, '#fff'], [L('小費', 'Tips'), s.tips, '#fff'], [L('獎勵', 'Rewards'), s.rewards, '#06d6a0'], [L('罰款', 'Fines'), -s.fines, '#ff6b6b'], [L('開攤前進貨', 'Stock'), -s.buy, '#ff9f80'], [L('換油', 'Oil'), -s.cost, '#ff9f80'], [rentLab, -s.paid, '#ff9f80']];
   rows.forEach(([k, v, col], i) => { const n = Math.round(v); const neg = n < 0; text(k, 170, 150 + i * 30, 17, '#e8dcc8', 'left', 'normal'); text(n === 0 ? '$0' : `${neg ? '−' : '+'}$${Math.abs(n)}`, 560, 150 + i * 30, 17, col, 'right'); });
   ctx.fillStyle = '#8a5733'; ctx.fillRect(170, 364, 390, 2);
-  text(L('今晚淨變化', 'Net tonight'), 170, 388, 22, '#ffcf6b'); text(`${s.net >= 0 ? '+' : '−'}$${Math.abs(Math.round(s.net))}`, 560, 388, 26, s.net >= 0 ? '#ffd166' : '#ff6b6b', 'right');
+  text(L('本週淨變化', 'Net this week'), 170, 388, 22, '#ffcf6b'); text(`${s.net >= 0 ? '+' : '−'}$${Math.abs(Math.round(s.net))}`, 560, 388, 26, s.net >= 0 ? '#ffd166' : '#ff6b6b', 'right');
   text(L(`手上現金 $${Math.round(G.cash)}`, `Cash $${Math.round(G.cash)}`), 170, 422, 20, '#fff');
   if (G.debt) text(L(`欠款 $${G.debt}（第 ${G.debtStrikes} 週）`, `Debt $${G.debt} (week ${G.debtStrikes})`), 560, 422, 16, '#ff6b6b', 'right');
   else text(G.cash >= STALL_PRICE ? L('夠付買斷價', 'Buyout ready') : L(`買斷還差 $${STALL_PRICE - Math.round(G.cash)}`, `$${STALL_PRICE - Math.round(G.cash)} to buyout`), 560, 422, 16, G.cash >= STALL_PRICE ? '#b7f5c5' : '#ffd59a', 'right');
@@ -2433,13 +2531,20 @@ function drawResults(time) {
   text(L(`鍋裡／盤上浪費 $${s.waste} · 缺貨流失 ${s.oos} 位`, `Wasted in the oil $${s.waste} · ${s.oos} walked, out of stock`), 170, 482, 15, '#aa8877', 'left', 'normal');
   const gradeCol = { S: '#ffd166', A: '#06d6a0', B: '#9ad1ff', C: '#ff6b6b' }[s.grade] || '#fff';
   text(s.grade, 210, 528, 48, gradeCol, 'center');
-  const note = { S: L('油色漂亮，熟客會再來。', 'The oil looked right. Regulars will be back.'), A: L('穩。明天招牌可以多備一點。', 'Steady. Stock a little more of the special.'), B: L('有幾網偏老，明天盯緊油聲。', 'A few nets ran long. Listen closer tomorrow.'), C: L('先顧火候和缺貨，再談擴攤。', 'Fix the fry and the stock before you expand.') }[s.grade] || '';
+  const note = {
+    happy: L('客人都滿意。下週招牌可以多備一點。', 'Guests left happy. Stock more of the special.'),
+    ok: L('大致穩住。下週少炸焦、少讓人走。', 'Steady enough. Burn less and lose fewer next week.'),
+    waste: L('客人還行，但報廢太多。下週少進會壞的。', 'Guests were fine. Too much spoiled. Buy less that dies.'),
+    lost: L('走掉的人太多。先把單做完。', 'Too many walked. Finish the tickets.'),
+    angry: L('滿意度太差。先顧火候和味道。', 'Mood was bad. Watch the fry.'),
+    empty: L('這週沒有服務到客人。', 'Nobody was served.'),
+  }[s.gradeWhy] || '';
   text(oneLine(note, 390, 15), 250, 512, 15, '#ffd59a', 'left', 'normal');
   const arc = (typeof NIGHT_ARC !== 'undefined') ? NIGHT_ARC[G.night % NIGHT_ARC.length] : null;
   if (arc) text(oneLine(L(arc[0], arc[1]), 420, 13), 250, 540, 13, '#f3e6d0', 'left', 'normal');
   text(L(`服務 ${s.served} · 滿意 ${s.happy} · 生氣 ${s.angry} · 流失 ${s.lost}`, `Served ${s.served} · happy ${s.happy} · angry ${s.angry} · lost ${s.lost}`), 170, 578, 16, '#ccc', 'left', 'normal');
   text(L(`口碑 ${Math.round(G.repStart)} → ${Math.round(G.rep)}`, `Rep ${Math.round(G.repStart)} → ${Math.round(G.rep)}`), 170, 606, 17, G.rep >= G.repStart ? '#06d6a0' : '#ff6b6b');
-  text(L('今晚紀事', "Tonight's log"), 640, 150, 19, '#ffd59a');
+  text(L('本週紀事', "This week's log"), 640, 150, 19, '#ffd59a');
   G.log.slice(-12).forEach((l, i) => wrap(logText(l), 640, 176 + i * 28, 480, 14, '#ddd', 18));
   if (G.gameOver) {
     const over = G.gameOver === 'rent' ? L('連續兩週付不出房租，房東把攤位收回了。', 'Missed rent two weeks. The landlord took the stall.') : G.gameOver === 'rep' ? L('口碑太差，沒有客人願意上門了。', 'Reputation collapsed. Nobody comes.') : G.gameOver;
@@ -2642,11 +2747,12 @@ function render(time) {
   else if (G.phase === 'shop') drawShop(time);
   else {
     drawScene(time); drawStation(); drawHUD(); drawBoonChips();
-    if (G.forkOpen) drawFork();
+    drawFx();
     if (G.theme === 'blackout' && !has('generator')) {
       const flick = Math.sin(performance.now() / 90) > 0.96 ? 0.12 : 0.4;
       ctx.fillStyle = `rgba(2,6,18,${flick})`; ctx.fillRect(0, 40, W, H - 40);
     }
+    if (G.forkOpen) drawFork();
     drawFx();
   }
   drawVol();
@@ -2669,6 +2775,6 @@ function frame(now) {
 newGame();
 if (params.has('autostart')) A.start();
 // 測試介面
-window.__game = { mustLeft: () => mustLeft(G.counter), get state() { return G; }, get buttons() { return buttons.map(({ onClick, ...b }) => b); }, A, ITEMS, SELF_MENU, MENU, step: (dt) => { update(dt); render(performance.now() / 1000); } };
+window.__game = { mustLeft: () => mustLeft(G.counter), get state() { return G; }, get buttons() { return buttons.map(({ onClick, ...b }) => b); }, A, ITEMS, SELF_MENU, MENU, nightGrade, billRows, batchQty, guestQuota, step: (dt) => { update(dt); render(performance.now() / 1000); } };
 requestAnimationFrame(frame);
 })();

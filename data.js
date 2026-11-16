@@ -103,7 +103,7 @@ const CTYPES = {
   regular:   { label: '熟客', en: 'Regular',     body: '#2e8b57', patience: 48, haggle: 0.0,  offer: [1, 1] },
   aunt:      { label: '殺價阿姨', en: 'Haggler', body: '#b5527a', patience: 55, haggle: 1.0,  offer: [0.68, 0.78] },
   drunk:     { label: '酒醉阿伯', en: 'Drunk', body: '#8a6d3b', patience: 55, haggle: 0.3,  offer: [0.8, 0.9] },
-  inspector: { label: '路人?', en: 'Passer-by?',    body: '#6c757d', patience: 60, haggle: 0.0,  offer: [1, 1] },
+  inspector: { label: '路人', en: 'Passer-by',    body: '#6c757d', patience: 60, haggle: 0.0,  offer: [1, 1] },
   byo:       { label: '自備食材客', en: 'BYO guest', body: '#7b5ea7', patience: 45, haggle: 0.0,  offer: [1, 1] },
   live:      { label: '直播客', en: 'Streamer', body: '#3d9970', patience: 32, haggle: 0.0,  offer: [1, 1] },
 };
