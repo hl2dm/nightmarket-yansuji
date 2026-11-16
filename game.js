@@ -32,6 +32,12 @@ function assetPath(src) {
   const base = (typeof window !== 'undefined' && window.__ASSET_BASE) || '/';
   return base + rel;
 }
+if (typeof document !== 'undefined' && !document.getElementById('nm-pixel-font')) {
+  const face = document.createElement('style');
+  face.id = 'nm-pixel-font';
+  face.textContent = `@font-face{font-family:NightMarketPixel;src:url("${assetPath('public/assets/font.ttf')}") format("truetype");font-display:swap;}`;
+  document.head.appendChild(face);
+}
 function loadImg(k, src, trim) { const im = new Image(); im.onload = () => { IMG[k] = trim ? prepFood(im) : im; }; im.src = assetPath(src); }
 // Production portraits retain their native 480×784 head-to-waist canvas and alpha.
 function prepFood(im) {
@@ -1219,6 +1225,23 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
   const hover = mouse.x >= x && mouse.x <= x + w && mouse.y >= y && mouse.y <= y + h && enabled;
   const down = !!(held && held.id === id && hover);
   const dy = down ? 4 : 0;
+  if (opt.bare) {
+    ctx.save();
+    if (hover || down || opt.on) {
+      ctx.strokeStyle = opt.on ? '#ffe8a3' : '#ffd166';
+      ctx.lineWidth = 2;
+      rr(x, y + dy, w, h, 6);
+      ctx.stroke();
+    }
+    if (label) {
+      ctx.fillStyle = enabled ? '#fff8e7' : '#9a8f86';
+      ctx.font = `normal ${opt.size || 18}px ${FONT}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(tr(label), x + w / 2, y + dy + h / 2 + 1);
+    }
+    ctx.restore();
+    return;
+  }
   const base = opt.color || '#c0392b';
   ctx.save();
   if (!down) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(x + 2, y + 5, w, h, 10); ctx.fill(); }
@@ -1872,19 +1895,23 @@ function countEnts(keys, st) { const m = countBy(keys); return Object.keys(m).ma
 
 // ---------- 左欄:食材、油溫、換油、熟客筆記 ----------
 function drawLeft() {
-  panel(8, 292, 300, 420, L('展示櫃', 'Case'));
-  if (IMG.glassCase) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.glassCase, 8, 322, 300, 330); ctx.restore(); }
+  panel(8, 292, 300, 420, IMG.glassCase ? '' : L('展示櫃', 'Case'));
+  if (IMG.glassCase) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.glassCase, 10, 300, 296, 356); ctx.restore(); }
+  else {
   text(L('肉', 'Meat'), 200, 312, 14, '#ffb067', 'right');
   text(L('菜', 'Veg'), 292, 312, 14, '#9be7b0', 'right');
+  }
   const keys = [...MENU], mlk = [];
   railCustomers().forEach(c => { if (!c.handed || (G.pay && c === G.counter)) return; mustLeft(c).forEach(k => { if (!mlk.includes(k)) mlk.push(k); }); });
   const lay = caseLayout();
+  if (!IMG.glassCase) {
   ctx.fillStyle = 'rgba(224,122,31,0.22)'; rr(14, lay.meatY - 2, 280, lay.meatH, 10); ctx.fill(); ctx.strokeStyle = '#e07a1f'; ctx.lineWidth = 2; rr(14, lay.meatY - 2, 280, lay.meatH, 10); ctx.stroke();
   ctx.fillStyle = 'rgba(58,154,74,0.18)'; rr(14, lay.vegY - 2, 280, lay.vegH, 10); ctx.fill(); ctx.strokeStyle = '#3a9a4a'; rr(14, lay.vegY - 2, 280, lay.vegH, 10); ctx.stroke();
+  }
   keys.forEach((k) => {
     const R = ITEM_RECT(k); if (!R) return; const { x: bx, y: by, w: tw, h: th } = R, I = ITEMS[k], meat = isMeat(k);
     const q = k === 'byo' ? 1 : stockOf(k);
-    btn('item_' + k, bx, by, tw, th, '', () => A.drop(k), { color: meat ? '#7a3c12' : '#2f5a34', enabled: q > 0 });
+    btn('item_' + k, bx, by, tw, th, '', () => A.drop(k), { bare: !!IMG.glassCase, color: meat ? '#7a3c12' : '#2f5a34', enabled: q > 0 });
     ctx.save(); ctx.beginPath(); ctx.rect(bx + 1, by + 1, tw - 2, th - 2); ctx.clip();
     const fim = foodImg(k, false), tight = th < 40, isz = th >= 58 ? 42 : th >= 44 ? 32 : tight ? 20 : 26;
     if (fim) blitFood(fim, bx + 2, by + (th - isz) / 2, isz, isz, true);
@@ -2076,14 +2103,21 @@ function drawSlot(i, net, now, cid) {
 function shaker(id, x, y, label, body, cap, on, en) {
   buttons.push({ id, x, y, w: 74, h: 52, enabled: en, clickable: en, onClick: () => A.toggle(id) });
   const sj = G.shakeJar && G.shakeJar.s === id && G.shakeJar.t > 0 ? G.shakeJar : null;
-  ctx.save(); ctx.fillStyle = on ? 'rgba(244,162,97,0.35)' : 'rgba(0,0,0,0.3)'; rr(x, y, 74, 52, 8); ctx.fill();
+  const jar = IMG['shaker_' + id];
+  ctx.save();
+  if (!jar) { ctx.fillStyle = on ? 'rgba(244,162,97,0.35)' : 'rgba(0,0,0,0.3)'; rr(x, y, 74, 52, 8); ctx.fill(); }
   if (on) { ctx.strokeStyle = '#ffe8a3'; ctx.lineWidth = 2.5; rr(x, y, 74, 52, 8); ctx.stroke(); }
-  const cx = x + 20, cy = y + 28; ctx.translate(cx, cy);
+  const cx = x + 37, cy = y + 26; ctx.translate(cx, cy);
   if (sj) ctx.rotate(-0.9 * Math.sin(sj.t / 0.6 * Math.PI) - 0.15 * Math.sin(sj.t * 60));
   if (!en) ctx.globalAlpha = 0.45;
-  const jar = IMG['shaker_' + id];
-  if (jar) { ctx.imageSmoothingEnabled = false; ctx.drawImage(jar, -36, -25, 72, 50.6); }
-  else {
+  if (jar) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(jar, -37, -26, 74, 52);
+    ctx.globalAlpha = 1;
+    const parts = label.split(' ');
+    text(parts[0], 0, -2, 11, '#3a2416', 'center');
+    if (parts[1]) text(parts[1], 0, 12, 10, '#5a3a12', 'center');
+  } else {
   ctx.fillStyle = cap; rr(-10, -20, 20, 9, 3); ctx.fill(); // 蓋
   ctx.fillStyle = '#d9dde2'; rr(-11, -12, 22, 4, 1); ctx.fill();
   ctx.fillStyle = 'rgba(0,0,0,0.5)'; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(i * 5, -17, 1.4, 0, 7); ctx.fill(); }
@@ -2094,8 +2128,10 @@ function shaker(id, x, y, label, body, cap, on, en) {
   ctx.fillStyle = '#fff8e7'; ctx.fillRect(-10, 4, 20, 8); ctx.fillStyle = cap; ctx.font = `bold 7px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(LANG === 'en' ? '' : label.slice(0, id === 'spicy' ? 2 : 3), 0, 8.5);
   }
   ctx.restore();
-  text(label.split(' ')[0], x + 54, y + 20, 11, en ? '#fff8e7' : '#9a8f86', 'center');
-  text(label.split(' ')[1] || '', x + 54, y + 38, 11, '#ffd59a', 'center', 'normal');
+  if (!jar) {
+    text(label.split(' ')[0], x + 54, y + 20, 11, en ? '#fff8e7' : '#9a8f86', 'center');
+    text(label.split(' ')[1] || '', x + 54, y + 38, 11, '#ffd59a', 'center', 'normal');
+  }
   if (sj) for (let i = 0; i < 2; i++) G.particles.push({ x: cx - 14 + rand(-4, 4), y: cy - 18, vx: rand(-20, 10), vy: rand(30, 70), life: 0.4, c: body });
 }
 
