@@ -160,6 +160,139 @@
       "logicalWidth": 142,
       "logicalHeight": 74,
       "transparent": true
+    },
+    {
+      "file": "bowl_steel.png",
+      "width": 440,
+      "height": 360,
+      "transparent": true
+    },
+    {
+      "file": "case_glass.png",
+      "width": 600,
+      "height": 840,
+      "transparent": true
+    },
+    {
+      "file": "food_babycorn_fried.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_babycorn_raw.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_greenpepper_fried.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_greenpepper_raw.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_porkskewer_fried.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_porkskewer_raw.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_silverbun_fried.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_silverbun_raw.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_squidball_fried.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_squidball_raw.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_sweetpotato_fried.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "food_sweetpotato_raw.png",
+      "width": 512,
+      "height": 512,
+      "transparent": true
+    },
+    {
+      "file": "shaker_basil.png",
+      "width": 296,
+      "height": 208,
+      "transparent": true
+    },
+    {
+      "file": "shaker_chili.png",
+      "width": 296,
+      "height": 208,
+      "transparent": true
+    },
+    {
+      "file": "shaker_salt.png",
+      "width": 296,
+      "height": 208,
+      "transparent": true
+    },
+    {
+      "file": "upg_bigNet.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
+    },
+    {
+      "file": "upg_bulk.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
+    },
+    {
+      "file": "upg_neon.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
+    },
+    {
+      "file": "upg_smallNet.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
     }
-  ]
+  ],
+  "font": {
+    "file": "font.ttf",
+    "family": "BoutiqueBitmap7x7",
+    "version": "1.71",
+    "source": "https://github.com/scott0107000/BoutiqueBitmap7x7/releases/tag/1.71",
+    "license": "FONT_LICENSE.txt"
+  }
 }
