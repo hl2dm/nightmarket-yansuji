@@ -355,11 +355,17 @@ function basketLayout() {
     { s: 'S', kind: 'veg', col: 3, sub: 1, locked: !extra, up: 'smallNet' },
   ];
 }
+function fryFrame() {
+  const x = 328, y = 304, col = 142, gap = 12, n = 4, pad = 16, head = 30, oil = 172;
+  return { x, y, col, gap, n, pad, head, oil, w: pad * 2 + n * col + (n - 1) * gap, h: head + oil + 16 };
+}
 function cellRect(b) {
-  const x = 348 + b.col * 152, w = 136;
-  if (b.s === 'L') return { x, y: 346, w, h: 166 };
-  const h = 78;
-  return { x, y: 346 + (b.sub || 0) * (h + 8), w, h };
+  const F = fryFrame();
+  const x = F.x + F.pad + b.col * (F.col + F.gap);
+  const top = F.y + F.head + 8;
+  if (b.s === 'L') return { x, y: top, w: F.col, h: F.oil - 16 };
+  const h = Math.floor((F.oil - 24) / 2);
+  return { x, y: top + (b.sub || 0) * (h + 8), w: F.col, h };
 }
 function slotRect(i) { return cellRect(G.baskets[i]); }
 function freeBasket(k) { // v41:只找空的、不在油裡的網
@@ -573,7 +579,8 @@ function spawn(type) {
   if (wline && type !== 'inspector' && rng() < 0.55) setLine(c, wline.zh, wline.en);
   const ev = eventTalk();
   if (ev && type !== 'inspector' && rng() < 0.72) setLine(c, ev.zh, ev.en);
-  c.x = -30;
+  c.x = -160;
+  c.hold = 0.55;
   if (G.queue.length >= 4) {
     G.stats.lost++; changeRep(-1); addLog(`${ct.label}看到隊伍太長,走掉了`, `${ct.en} saw the line and left`);
     G.walkers.push({ c, x: 40, dir: -1 }); return;
@@ -1114,13 +1121,19 @@ function update(dt) {
   });
   // 客人
   if (!G.counter && G.queue.length && G.t < G.dayLen + G.grace) { G.counter = G.queue.shift(); G.counter.x = G.counter.x || 400; G.counter.atCounter = 0; sfx('order'); }
-  G.queue.forEach((c, i) => { c.waited = (c.waited || 0) + dt; c.patience -= dt * 0.4; c.tx = slotHome(i + 1); c.x += clamp(c.tx - c.x, -220 * dt, 220 * dt); });
+  G.queue.forEach((c, i) => {
+    c.waited = (c.waited || 0) + dt; c.patience -= dt * 0.4; c.tx = slotHome(i + 1);
+    if (c.hold > 0) c.hold -= dt;
+    else c.x += clamp(c.tx - c.x, -160 * dt, 160 * dt);
+  });
   for (let i = G.queue.length - 1; i >= 0; i--) if (G.queue[i].patience <= 0) {
     const c = G.queue.splice(i, 1)[0]; scrapOrder(c); G.stats.lost++; changeRep(-2); addLog(`${CTYPES[c.type].label}排太久,離開了`, `${CTYPES[c.type].en} waited too long and left`); G.walkers.push({ c, x: c.x, dir: -1 });
   }
   const c = G.counter;
   if (c) {
-    c.x += clamp(slotHome(0) - c.x, -300 * dt, 300 * dt); c.atCounter += dt;
+    if (c.hold > 0) c.hold -= dt;
+    else c.x += clamp(slotHome(0) - c.x, -160 * dt, 160 * dt);
+    c.atCounter += dt;
     c.waited = (c.waited || 0) + dt; if (!G.pay) c.patience -= dt;
     if (c.type === 'drunk' && !c.changed && c.handed && c.atCounter > 6 && !G.pay) {
       c.changed = true; const ok = MENU.filter(k => stockOf(k) > 0); const k = ok.length ? pick(ok) : 'tempura'; c.order.items.push(k); (c.order.add = c.order.add || []).push(k); c.order.items.sort((a, b) => MENU.indexOf(a) - MENU.indexOf(b));
@@ -1270,11 +1283,12 @@ function guestCardRect() { return cardGeom(0); }
 function billAnchor() { return { x: 1124, y: 470 }; }
 function cashboxRect() { return { x: 988, y: 640, w: 272, h: 48 }; }
 function rackRect(i) {
-  const slot = cellRect({ col: Math.min(3, i), s: 'L', sub: 0 });
+  const F = fryFrame();
+  const s = cellRect({ col: Math.min(3, i), s: 'L', sub: 0 });
   const spill = Math.max(0, i - 3);
-  return { x: slot.x + spill * 10, y: 548 + spill * 4, w: slot.w, h: 100 };
+  return { x: s.x + spill * 8, y: F.y + F.h + 12 + spill * 4, w: s.w, h: 88 };
 }
-function overFryer(p) { return p.x > 316 && p.x < 964 && p.y > 298 && p.y < 540; }
+function overFryer(p) { const F = fryFrame(); return p.x > F.x && p.x < F.x + F.w && p.y > F.y && p.y < F.y + F.h; }
 const CHROME = /^(temp_|oil$|vol|lang|report|swap|send|pay|dump|refuse|up_|buy_|unbuy_|start|continue|newRun|open|next|toShop|bag)/;
 function findDrag(p) {
   const pad = hitPad();
@@ -1589,15 +1603,19 @@ function customerRowCanvas(theme) {
   pool.addColorStop(0, theme === 'blackout' && !gen ? 'rgba(255,140,40,0.05)' : 'rgba(255,160,70,0.18)');
   pool.addColorStop(1, 'rgba(255,160,70,0)');
   g.fillStyle = pool; g.fillRect(160, 36, 480, 100);
-  // 兩側遠攤，中間留給站櫃台的人
-  [[640, 200, 76], [900, 220, 70], [1120, 150, 80]].forEach(([x, w, top], i) => {
-    g.fillStyle = i % 2 ? 'rgba(0,0,0,0.34)' : 'rgba(0,0,0,0.22)';
-    g.beginPath(); g.moveTo(x, hh); g.lineTo(x + 10, top); g.lineTo(x + w - 8, top + 6); g.lineTo(x + w, hh); g.fill();
+  // 兩側遠攤，右邊不要留一片空黑
+  for (let i = 0; i < 7; i++) {
+    const x = 520 + i * 108, top = 78 + (i % 3) * 6;
+    g.fillStyle = i % 2 ? '#4a2418' : '#2c1814';
+    g.fillRect(x, top + 18, 96, hh - top - 28);
+    g.fillStyle = i % 2 ? P.aw : P.aw2;
+    g.fillRect(x - 4, top, 104, 14);
     if (theme !== 'blackout' || gen) {
       g.fillStyle = P.win;
-      for (let k = 0; k < 3; k++) g.fillRect(x + 28 + k * 36, top + 16, 8, 12);
+      g.fillRect(x + 14, top + 28, 22, 16);
+      g.fillRect(x + 48, top + 28, 22, 16);
     }
-  });
+  }
   g.fillStyle = 'rgba(0,0,0,0.28)';
   [236, 700, 1088].forEach(x => g.fillRect(x, 52, 5, 74));
   // 棚沿：只佔最上緣，不蓋到臉
@@ -1657,26 +1675,21 @@ function drawScene(time) {
   drawCustomerRow(time, G.theme || 'fair');
   ctx.fillStyle = 'rgba(14,8,5,0.97)'; ctx.fillRect(0, STRIP.y1, W, H - STRIP.y1);
   drawRail();
-  drawNotebook(10, 46);
+  drawNotebook(10, 48);
   G.walkers.forEach(w => {
     const b = bustSlot();
     drawBust(w.c, w.x - b.w / 2, b.y, b.w, b.h);
     if (w.sayT > 0 && w.c && w.c.line) text(oneLine(L(w.c.line, w.c.lineEn || w.c.line), 150, 13), w.x + b.w * 0.28, b.y + 18, 13, '#fff8e7', 'center');
   });
-  if (IMG.cat && G.cat && G.cat.nap <= 0) {
-    const im = IMG.cat, hh = 36, ww = im.width / im.height * hh;
-    ctx.save(); ctx.translate(G.cat.x, STRIP.y1 - 4); if (G.cat.dir < 0) ctx.scale(-1, 1);
-    ctx.drawImage(im, -ww / 2, -hh, ww, hh); ctx.restore();
-  }
 }
 function drawNotebook(x, y) {
   ctx.save();
-  ctx.fillStyle = '#fff3a8'; rr(x, y, 154, 232, 6); ctx.fill();
-  ctx.strokeStyle = '#e1c56a'; ctx.lineWidth = 1; rr(x, y, 154, 232, 6); ctx.stroke();
-  text(L('熟客老樣子', 'Regular’s usual'), x + 8, y + 18, 13, '#7a4b00');
-  iconRow(countEnts(G.regularOrder.items, 'self'), x + 8, y + 110, 44, 2, 138);
-  jarIcon('spicy', x + 18, y + 200, 22, G.regularOrder.spicy);
-  jarIcon('basil', x + 48, y + 200, 22, G.regularOrder.basil);
+  ctx.fillStyle = '#fff3a8'; rr(x, y, 154, 72, 6); ctx.fill();
+  ctx.strokeStyle = '#e1c56a'; ctx.lineWidth = 1; rr(x, y, 154, 72, 6); ctx.stroke();
+  text(L('熟客', 'Regular'), x + 8, y + 14, 12, '#7a4b00');
+  jarIcon('spicy', x + 108, y + 14, 14, G.regularOrder.spicy);
+  jarIcon('basil', x + 132, y + 14, 14, G.regularOrder.basil);
+  iconRow(countEnts(G.regularOrder.items, 'self'), x + 8, y + 48, 26, 2, 138);
   ctx.restore();
 }
 function oneLine(s, maxW, size) {
@@ -1887,11 +1900,12 @@ function drawBowl(bi, B, x, y, w, h, cid) {
 // ---------- 中央:俯視油槽 ----------
 function drawTank() {
   const old = G.oilUse > OIL_LIMIT, now = performance.now() / 1000;
-  const X = 316, Y = 298, TW = 648, TH = 242;
-  const tankI = IMG.tank2 || IMG.tankTop;
-  if (tankI) { ctx.save(); if (old) ctx.filter = 'brightness(0.7) sepia(0.6)'; ctx.drawImage(tankI, X - 6, Y - 4, TW + 12, TH + 8); ctx.restore();
-    if (fried().length) { ctx.fillStyle = `rgba(255,230,160,${0.05 + 0.03 * Math.sin(now * 9)})`; rr(X + 40, Y + 40, TW - 80, TH - 80, 10); ctx.fill(); } }
-  else { ctx.fillStyle = '#6c7178'; rr(X, Y, TW, TH, 14); ctx.fill(); ctx.fillStyle = old ? '#6a440e' : '#c98a28'; rr(X + 10, Y + 10, TW - 20, TH - 20, 10); ctx.fill(); }
+  const F = fryFrame();
+  const X = F.x, Y = F.y, TW = F.w, TH = F.h;
+  ctx.fillStyle = '#5c6168'; rr(X, Y, TW, TH, 12); ctx.fill();
+  ctx.fillStyle = '#8d949c'; rr(X + 4, Y + 4, TW - 8, 8, 3); ctx.fill();
+  ctx.fillStyle = old ? '#6a440e' : '#c98a28'; rr(X + 8, Y + F.head - 4, TW - 16, F.oil + 8, 8); ctx.fill();
+  ctx.fillStyle = old ? 'rgba(40,20,0,0.35)' : 'rgba(255,220,120,0.18)'; rr(X + 14, Y + F.head, TW - 28, F.oil - 4, 6); ctx.fill();
   if (G.fullFlash > 0) { ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; rr(X + 2, Y + 2, TW - 4, TH - 4, 14); ctx.stroke(); }
   const frac = clamp(G.oilUse / OIL_LIMIT, 0, 1);
   const bx = X + 16, by = Y + 8, bw = TW - 32;
@@ -1914,7 +1928,8 @@ function drawTank() {
   const cid = G.counter && !G.pay ? G.counter.id : -1;
   for (let i = 0; i < G.fryer.length; i++) if (!G.baskets[i].locked) drawSlot(i, G.fryer[i], now, cid);
   ctx.save();
-  ctx.fillStyle = 'rgba(30,16,4,0.45)'; rr(316, 542, 648, 112, 10); ctx.fill();
+  const rackY = F.y + F.h + 8;
+  ctx.fillStyle = 'rgba(30,16,4,0.45)'; rr(F.x, rackY, F.w, 100, 10); ctx.fill();
   const netI = IMG.basketTop || IMG.smallNet;
   for (let i = 0; i < 4; i++) {
     const box = rackRect(i);
@@ -2018,16 +2033,20 @@ function drawRight() {
     if (en) btn('dump', X + 190, 292, 78, 28, L('倒掉', 'Dump'), A.dump, { color: '#6b4226', size: 14 });
     const well = plateRect();
     ctx.save();
-    ctx.beginPath(); rr(well.x, well.y, well.w, well.h, 10); ctx.clip();
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(well.x, well.y, well.w, well.h);
+    ctx.fillStyle = '#6e757c'; rr(well.x - 4, well.y - 4, well.w + 8, well.h + 8, 16); ctx.fill();
+    ctx.fillStyle = '#c5ccd2'; rr(well.x, well.y, well.w, well.h, 14); ctx.fill();
+    const steel = ctx.createLinearGradient(well.x, well.y, well.x, well.y + well.h);
+    steel.addColorStop(0, '#eef2f4'); steel.addColorStop(0.45, '#b7c0c6'); steel.addColorStop(1, '#8e989f');
+    ctx.fillStyle = steel; ctx.beginPath(); ctx.ellipse(well.x + well.w / 2, well.y + well.h / 2, well.w * 0.42, well.h * 0.38, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(well.x + well.w / 2, well.y + well.h / 2 - 4, well.w * 0.28, well.h * 0.16, 0, 0, 7); ctx.stroke();
     if (has('heatlamp')) {
       const lg = ctx.createRadialGradient(X + 115, well.y + 54, 6, X + 115, well.y + 60, 110);
       lg.addColorStop(0, 'rgba(255,186,70,0.28)'); lg.addColorStop(1, 'rgba(255,186,70,0)');
       ctx.fillStyle = lg; ctx.fillRect(well.x, well.y, well.w, well.h);
     }
     if (!en) {
-      ctx.save(); ctx.globalAlpha = 0.35; ctx.strokeStyle = '#e7d7c3'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(X + 115, well.y + well.h / 2, 58, 30, 0, 0, 7); ctx.stroke(); ctx.restore();
+      text(L('空盤', 'Empty'), well.x + well.w / 2, well.y + well.h / 2, 14, 'rgba(60,40,20,0.45)', 'center');
     }
     G.plate.forEach((it, i) => {
       const per = 4, sz = 44, bx = X + 10 + (i % per) * 64, by = well.y + 10 + Math.floor(i / per) * 50;
@@ -2204,19 +2223,17 @@ function drawRail() {
   list.slice(0, 3).forEach((c, i) => {
     const g = cardGeom(i);
     const born = c.railBorn ?? (c.railBorn = now);
-    const slide = (1 - clamp((now - born) * 4, 0, 1)) * 24;
-    const x = g.x + slide, y = g.y, w = g.w, h = g.h;
+    const x = g.x, y = g.y, w = g.w, h = g.h;
     const foodH = bustSlot().foodH, bust = bustSlot();
     const ratio = clamp(c.patience / c.max, 0, 1), atC = c === G.counter;
     const col = ratio > 0.5 ? '#2f6b3a' : ratio > 0.25 ? '#a86b12' : '#9a2b2b';
-    const home = x + w / 2;
-    const far = Math.abs((c.x || home) - home) > 30;
-    const bx = far ? (c.x || home) - bust.w / 2 : x + (w - bust.w) / 2;
-    drawBust(c, bx, bust.y, bust.w, bust.h);
+    const home = g.x + g.w / 2;
     ctx.fillStyle = '#fffaf4';
     rr(x, y + h - foodH, w, foodH, 4); ctx.fill();
     ctx.strokeStyle = atC ? '#c8962e' : '#2b1a0e'; ctx.lineWidth = atC ? 3 : 1.5;
     rr(x, y + h - foodH, w, foodH, 4); ctx.stroke();
+    const px = (c.hold > 0 ? -160 : (c.x == null ? -160 : c.x));
+    drawBust(c, px - bust.w / 2, bust.y, bust.w, bust.h);
     ctx.strokeStyle = '#2b1a0e'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(x + 8, y + h - foodH); ctx.lineTo(x + w - 8, y + h - foodH); ctx.stroke();
     ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][i] || '#5c636a';
