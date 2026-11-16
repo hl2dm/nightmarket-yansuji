@@ -5,7 +5,7 @@
 const P = new URLSearchParams(location.search);
 const HEADLESS = P.get('mute') === '1' || navigator.webdriver === true;
 const VOLS = [0, 0.35, 0.7, 1];
-const DIR = 'assets/sfx/';
+const DIR = ((typeof window !== 'undefined' && window.__ASSET_BASE) || '/') + 'assets/sfx/';
 const NAMES = ['fry_loop_a', 'fry_loop_b', 'drop_sizzle', 'crackle_1', 'crackle_2', 'crackle_3', 'basket_clink', 'lift_drip',
   'scissors_snip', 'burnt_hiss', 'register']; // v37: 加回機械收銀機(按鍵+抽屜+硬幣,無鈴). v34: 移除所有叮/鈴/收銀鈴等有音高的提示音(炸歸炸,不要音樂感)
 let level = 2; try { const v = localStorage.getItem('yansuji_vol'); if (v !== null) level = +v; } catch (e) {}
@@ -71,8 +71,8 @@ const SFX = {
     play('drop_sizzle', { v: rnd(0.8, 1), rate: rnd(0.95, 1.05) });
     play('basket_clink', { v: 0.35, rate: rnd(0.95, 1.05) });
   },
-  done() {}, // v34: 熟度只靠畫面,不出聲
-  warn() {},
+  done() { crackle(0.85); play('drop_sizzle', { v: 0.18, rate: 1.35 }); }, // 熟了：劈啪，不響鈴
+  warn() { if (warnT > 0) return; warnT = 1.1; play('burnt_hiss', { v: 0.28, rate: 1.45 }); },
   burnt() { play('burnt_hiss', { v: 0.6, rate: 0.9 }); },
   lift() { // 撈起:籃子碰撞 + 滴油嘶聲
     if (!ac) return;
