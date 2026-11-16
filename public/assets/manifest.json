@@ -286,6 +286,60 @@
       "width": 192,
       "height": 192,
       "transparent": true
+    },
+    {
+      "file": "upg_fridge.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
+    },
+    {
+      "file": "upg_filter.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
+    },
+    {
+      "file": "upg_fan.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
+    },
+    {
+      "file": "upg_heatlamp.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
+    },
+    {
+      "file": "upg_generator.png",
+      "width": 192,
+      "height": 192,
+      "transparent": true
+    },
+    {
+      "file": "btn_wood.png",
+      "width": 544,
+      "height": 112,
+      "transparent": true
+    },
+    {
+      "file": "btn_green.png",
+      "width": 544,
+      "height": 112,
+      "transparent": true
+    },
+    {
+      "file": "btn_red.png",
+      "width": 544,
+      "height": 112,
+      "transparent": true
+    },
+    {
+      "file": "boon_card.png",
+      "width": 720,
+      "height": 840,
+      "transparent": true
     }
   ],
   "font": {

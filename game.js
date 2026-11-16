@@ -107,8 +107,9 @@ loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bo
 loadImg('hand', 'assets/hand_boss.png');
 loadImg('cat', 'assets/cat_market.png');
 const meatCap = () => (typeof has === 'function' && has('bigNet')) ? 6 : MEAT_CAP;
-['bigNet','smallNet','fridge','filter','neon','fan','bulk','heatlamp','generator'].forEach(k => loadImg('upg_' + k, `${['bigNet','smallNet','neon','bulk'].includes(k) ? 'public/assets' : 'assets'}/upg_${k}.png?v=art2`));
+['bigNet','smallNet','fridge','filter','neon','fan','bulk','heatlamp','generator'].forEach(k => loadImg('upg_' + k, `public/assets/upg_${k}.png?v=art3`));
 Object.entries({shaker_salt: 'shaker_salt', shaker_spicy: 'shaker_chili', shaker_basil: 'shaker_basil', steelBowl: 'bowl_steel', glassCase: 'case_glass'}).forEach(([key, file]) => loadImg(key, `public/assets/${file}.png?v=art2`));
+['btn_wood', 'btn_green', 'btn_red', 'boon_card'].forEach(k => loadImg(k, `public/assets/${k}.png?v=art3`));
 const sfx = (n, ...a) => { const S = window.SFX; if (S && S[n]) S[n](...a); };
 const foodImg = (k, fried = true) => IMG[(fried ? 'fr_' : 'raw_') + k] || IMG['f_' + (IMG_ALIAS[k] || k)];
 const IMG_ALIAS = { byo: 'mushroom', saltchicken: 'chicken' };
@@ -1219,6 +1220,7 @@ function endDay() {
 }
 
 // ---------- 輸入 ----------
+const ACTION_BOARDS = { bag: 'wood', start: 'wood', open: 'wood', nextNight: 'wood', readNews: 'wood', payFull: 'green', payAccept: 'green', payMid: 'green', payInsist: 'green', refuse: 'red', oil: 'red' };
 let buttons = [];
 function btn(id, x, y, w, h, label, onClick, opt = {}) {
   const enabled = opt.enabled !== false;
@@ -1247,12 +1249,21 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
   ctx.save();
   if (!down) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(x + 2, y + 5, w, h, 10); ctx.fill(); }
   if (opt.pulse && !down) { const q = 0.4 + 0.6 * Math.sin(performance.now() / 260); ctx.shadowColor = '#ffcf6b'; ctx.shadowBlur = 8 + q * 18; }
-  ctx.fillStyle = !enabled ? '#4a4040' : opt.on ? '#f4a261' : hover ? lighten(base) : base;
-  rr(x, y + dy, w, h, 10); ctx.fill();
-  if (down) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; rr(x, y + dy, w, h, 10); ctx.fill(); }
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = hover || opt.on ? '#ffe8a3' : 'rgba(255,230,180,0.28)'; ctx.lineWidth = hover || opt.on ? 3 : 1.5;
-  rr(x, y + dy, w, h, 10); ctx.stroke();
+  const board = IMG['btn_' + ACTION_BOARDS[id]];
+  if (board) {
+    ctx.save();
+    ctx.filter = !enabled ? 'grayscale(0.75) brightness(0.55)' : down ? 'brightness(0.8)' : hover || opt.on ? 'brightness(1.18)' : 'none';
+    ctx.drawImage(board, x, y + dy, w, h);
+    ctx.restore();
+    ctx.shadowBlur = 0;
+  } else {
+    ctx.fillStyle = !enabled ? '#4a4040' : opt.on ? '#f4a261' : hover ? lighten(base) : base;
+    rr(x, y + dy, w, h, 10); ctx.fill();
+    if (down) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; rr(x, y + dy, w, h, 10); ctx.fill(); }
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = hover || opt.on ? '#ffe8a3' : 'rgba(255,230,180,0.28)'; ctx.lineWidth = hover || opt.on ? 3 : 1.5;
+    rr(x, y + dy, w, h, 10); ctx.stroke();
+  }
   ctx.fillStyle = enabled ? '#fff8e7' : '#9a8f86';
   ctx.font = `normal ${opt.size || 18}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(tr(label), x + w / 2, y + dy + h / 2 + 1);
@@ -2657,7 +2668,8 @@ function drawBoon() {
     const x = (W - (n * w + (n - 1) * gap)) / 2 + i * (w + gap), y = 120;
     const tone = b.tone === 'good' ? '#2c6b4a' : '#8a5a12';
     ctx.fillStyle = '#f6ecd4'; rr(x, y, w, h, 16); ctx.fill();
-    ctx.strokeStyle = '#4a2c18'; ctx.lineWidth = 6; rr(x, y, w, h, 16); ctx.stroke();
+    if (IMG.boon_card) ctx.drawImage(IMG.boon_card, x, y, w, h);
+    else { ctx.strokeStyle = '#4a2c18'; ctx.lineWidth = 6; rr(x, y, w, h, 16); ctx.stroke(); }
     ctx.fillStyle = tone; rr(x + 18, y + 18, w - 36, 44, 8); ctx.fill();
     text(L(b.tone === 'good' ? '順' : '有代價', b.tone === 'good' ? 'Clean' : 'It costs'), x + 36, y + 40, 14, '#fff8e8', 'left', 'normal');
     text(L(b.zh, b.en), x + w / 2, y + 110, 28, '#3a2416', 'center');
