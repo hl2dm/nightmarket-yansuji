@@ -50,9 +50,11 @@ function prepPortrait(im) {
   }
   if (right < left || bottom < top) return im;
   g.putImageData(data, 0, 0);
+  let sw = right - left + 1, sh = bottom - top + 1;
+  if (sh > sw * 1.35) sh = Math.round((bottom - top + 1) * 0.5);
   const portrait = document.createElement('canvas'); portrait.width = portrait.height = 128;
   const p = portrait.getContext('2d'); p.imageSmoothingEnabled = false;
-  const sw = right - left + 1, sh = bottom - top + 1, scale = Math.min(120 / sw, 124 / sh);
+  const scale = Math.min(120 / sw, 124 / sh);
   const dw = Math.round(sw * scale), dh = Math.round(sh * scale);
   p.drawImage(source, left, top, sw, sh, Math.round((128 - dw) / 2), 128 - dh, dw, dh);
   return portrait;
@@ -78,7 +80,7 @@ function prepFood(im) {
   return c2;
 }
 loadImg('bg', 'art/bg_stall.jpg');
-['normal','normal_b','normal_c','student','student_b','regular','aunt','drunk','inspector','byo','inspector_revealed','live'].forEach(k => loadImg('c_' + k, `art/cust_${k}.png?v=bust1`));
+['normal','normal_b','normal_c','student','student_b','regular','aunt','drunk','inspector','byo','inspector_revealed','live'].forEach(k => loadImg('c_' + k, `art/cust_${k}.png?v=bust2`));
 ['chicken','tempura','riceblood','bean','mushroom','squid'].forEach(k => loadImg('f_' + k, `art/food_${k}.png`));
 loadImg('tankTop', 'art/fryer_top.jpg'); loadImg('basketTop', 'art/basket_top.png');
 // v3.2:Grok 像素素材(assets/,由 _tools/cutout.py 去綠幕產生);沒載到就退回上面的舊圖
@@ -353,11 +355,11 @@ function basketLayout() {
     { s: 'S', kind: 'veg', col: 3, sub: 1, locked: !extra, up: 'smallNet' },
   ];
 }
-const COLX = [416, 566, 716, 866];
 function cellRect(b) {
-  const x = COLX[b.col] - 62;
-  if (b.s === 'L') return { x, y: 350, w: 124, h: 164 };
-  return { x, y: 350 + (b.sub || 0) * 86, w: 124, h: 78 };
+  const x = 348 + b.col * 152, w = 136;
+  if (b.s === 'L') return { x, y: 346, w, h: 166 };
+  const h = 78;
+  return { x, y: 346 + (b.sub || 0) * (h + 8), w, h };
 }
 function slotRect(i) { return cellRect(G.baskets[i]); }
 function freeBasket(k) { // v41:只找空的、不在油裡的網
@@ -1263,11 +1265,11 @@ function guestCardRect() { return cardGeom(0); }
 function billAnchor() { return { x: 1124, y: 470 }; }
 function cashboxRect() { return { x: 988, y: 640, w: 272, h: 48 }; }
 function rackRect(i) {
-  const n = 4, w = 140, h = 100, gap = 10, x0 = 340, y = 552;
-  const col = Math.min(i, n - 1), spill = Math.max(0, i - (n - 1));
-  return { x: x0 + col * (w + gap) + spill * 12, y: y + spill * 4, w, h };
+  const slot = cellRect({ col: Math.min(3, i), s: 'L', sub: 0 });
+  const spill = Math.max(0, i - 3);
+  return { x: slot.x + spill * 10, y: 548 + spill * 4, w: slot.w, h: 100 };
 }
-function overFryer(p) { return p.x > 320 && p.x < 980 && p.y > 304 && p.y < 530; }
+function overFryer(p) { return p.x > 316 && p.x < 964 && p.y > 298 && p.y < 540; }
 const CHROME = /^(temp_|oil$|vol|lang|report|swap|send|pay|dump|refuse|up_|buy_|unbuy_|start|continue|newRun|open|next|toShop|bag)/;
 function findDrag(p) {
   const pad = hitPad();
@@ -1476,11 +1478,14 @@ function drawBust(c, x, y, w, h) {
   ctx.drawImage(im, x + (w - dw) / 2, y + h - dh + bob, dw, dh);
   ctx.restore();
 }
-function blitFit(im, x, y, w, h) {
+function blitCover(im, x, y, w, h) {
   if (!im) return;
-  const s = Math.min(w / im.width, h / im.height);
+  const s = Math.max(w / im.width, h / im.height);
   const dw = im.width * s, dh = im.height * s;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
   ctx.drawImage(im, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  ctx.restore();
 }
 
 function chip(key, x, y, d = null, w = 92, h = 34, it = null) {
@@ -1876,7 +1881,7 @@ function drawBowl(bi, B, x, y, w, h, cid) {
 // ---------- 中央:俯視油槽 ----------
 function drawTank() {
   const old = G.oilUse > OIL_LIMIT, now = performance.now() / 1000;
-  const X = 324, Y = 300, TW = 632, TH = 236;
+  const X = 316, Y = 298, TW = 648, TH = 242;
   const tankI = IMG.tank2 || IMG.tankTop;
   if (tankI) { ctx.save(); if (old) ctx.filter = 'brightness(0.7) sepia(0.6)'; ctx.drawImage(tankI, X - 6, Y - 4, TW + 12, TH + 8); ctx.restore();
     if (fried().length) { ctx.fillStyle = `rgba(255,230,160,${0.05 + 0.03 * Math.sin(now * 9)})`; rr(X + 40, Y + 40, TW - 80, TH - 80, 10); ctx.fill(); } }
@@ -1903,11 +1908,11 @@ function drawTank() {
   const cid = G.counter && !G.pay ? G.counter.id : -1;
   for (let i = 0; i < G.fryer.length; i++) if (!G.baskets[i].locked) drawSlot(i, G.fryer[i], now, cid);
   ctx.save();
-  ctx.fillStyle = 'rgba(30,16,4,0.45)'; rr(324, 544, 632, 116, 10); ctx.fill();
+  ctx.fillStyle = 'rgba(30,16,4,0.45)'; rr(316, 542, 648, 112, 10); ctx.fill();
   const netI = IMG.basketTop || IMG.smallNet;
   for (let i = 0; i < 4; i++) {
     const box = rackRect(i);
-    if (netI) { ctx.save(); ctx.globalAlpha = G.rack[i] ? 1 : 0.92; blitFit(netI, box.x, box.y, box.w, box.h); ctx.restore(); }
+    if (netI) { ctx.save(); ctx.globalAlpha = G.rack[i] ? 1 : 0.92; blitCover(netI, box.x + 4, box.y + 4, box.w - 8, box.h - 8); ctx.restore(); }
     else { ctx.strokeStyle = 'rgba(220,220,220,0.8)'; ctx.lineWidth = 1.5; for (let g = 0; g < 6; g++) { ctx.beginPath(); ctx.moveTo(box.x + 8, box.y + 16 + g * 14); ctx.lineTo(box.x + box.w - 8, box.y + 16 + g * 14); ctx.stroke(); } }
   }
   (G.rack || []).forEach((r, i) => {
@@ -1939,7 +1944,7 @@ function drawSlot(i, net, now, cid) {
   const finish = () => { if (draining) ctx.restore(); };
   ctx.fillStyle = on ? 'rgba(20,10,4,0.28)' : 'rgba(20,10,4,0.12)'; rr(x, y, w, h, 10); ctx.fill();
   const netI = (big ? IMG.bigNet : IMG.smallNet) || IMG.basketTop;
-  if (netI) { ctx.save(); ctx.globalAlpha = on ? 0.9 : 0.78; blitFit(netI, x + 2, y + 2, w - 4, h - 4); ctx.restore(); }
+  if (netI) { ctx.save(); ctx.globalAlpha = on ? 0.92 : 0.8; blitCover(netI, x, y, w, h); ctx.restore(); }
   if (!on) {
     const lab = b.kind === 'chicken' ? L('雞排', 'Cutlet') : (big ? L('肉', 'Meat') : L('菜', 'Veg'));
     text(lab, x + w / 2, y + h * 0.78, big ? 15 : 12, 'rgba(255,236,210,0.45)', 'center');
