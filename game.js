@@ -574,7 +574,8 @@ function spawn(type) {
   const nt = noticeNow();
   const pace = (type === 'inspector' ? 1 : ((nt.pace) || 1) * (hasBoon('loud') ? 0.9 : 1) * (hasBoon('night') && G.t > 120 ? 0.85 : 1)) * ((G.notice === 'cram' && type === 'student') ? 0.78 : 1);
   const c = { id: G.nextId++, type, order: makeOrder(type), patience: ct.patience * (has('fan') ? 1.2 : 1) * ((THEMES[G.theme] || {}).patience || 1) * pace, max: ct.patience * (has('fan') ? 1.2 : 1) * ((THEMES[G.theme] || {}).patience || 1) * pace,
-    x: 150, tx: 0, atCounter: 0, changed: false, sus: type === 'byo' && rng() < 0.6, revealed: false,
+    x: W + 160, tx: 0, atCounter: 0, changed: false, sus: type === 'byo' && rng() < 0.6, revealed: false,
+    arrived: false, leaving: false,
     hue: rand(-15, 15), line: '', look: pick({ normal: ['normal', 'normal_b', 'normal_c'], student: ['student', 'student_b'], live: ['live'] }[type] || [type]) };
   const key = type === 'byo' ? (c.sus ? 'byoSus' : 'byo') : LINES[type] ? type : 'greet';
   const pl = pickLine(key); setLine(c, pl.zh, pl.en);
@@ -582,11 +583,12 @@ function spawn(type) {
   if (wline && type !== 'inspector' && rng() < 0.55) setLine(c, wline.zh, wline.en);
   const ev = eventTalk();
   if (ev && type !== 'inspector' && rng() < 0.72) setLine(c, ev.zh, ev.en);
-  c.x = -160;
-  c.hold = 0.55;
+  c.x = W + 160;
+  c.hold = 0.2;
   if (G.queue.length >= 4) {
     G.stats.lost++; changeRep(-1); addLog(`${ct.label}看到隊伍太長,走掉了`, `${ct.en} saw the line and left`);
-    G.walkers.push({ c, x: 40, dir: -1 }); return;
+    c.leaving = true;
+    G.walkers.push({ c, x: W + 40, dir: 1 }); return;
   }
   G.queue.push(c);
 }
@@ -750,9 +752,9 @@ const A = {
   drop(k, cid) {
     const list = railCustomers();
     let c = cid ? list.find(x => x.id === cid) : null;
-    if (!c) c = list.find(x => x.handed && !(G.pay && x === G.counter) && mustLeft(x).includes(k));
-    if (!c || !c.handed || (G.pay && c === G.counter)) {
-      popup(list.some(x => x.handed) ? L('這幾張單都不用', 'No ticket needs that') : L('等夾單上來', 'Wait for a ticket'), 780, 90, '#ffb703');
+    if (!c) c = list.find(x => x.arrived && !x.leaving && x.handed && !(G.pay && x === G.counter) && mustLeft(x).includes(k));
+    if (!c || !c.arrived || c.leaving || !c.handed || (G.pay && c === G.counter)) {
+      popup(list.some(x => x.arrived && !x.leaving && x.handed) ? L('這幾張單都不用', 'No ticket needs that') : L('等夾單上來', 'Wait for a ticket'), 780, 90, '#ffb703');
       return;
     }
     if (!mustLeft(c).includes(k)) { popup(L('這張單不用', 'Not on this ticket'), 780, 90, '#ffb703'); return; }
@@ -1043,8 +1045,7 @@ function finishPay(amount) {
 function doReport() {
   const c = G.counter;
   if (c.sus) { changeRep(3); G.stats.rewards += 100; G.cash += 100; addLog('檢舉來路不明的食材,警察獎勵 $100', 'Reported shady food, +$100'); popup(L('+$100 檢舉正確', '+$100 right call'), 640, 300, '#06d6a0'); leave(c, '……(被帶走了)', false, '……(taken away)'); }
-  else { changeRep(-5); G.stats.angry++; addLog(`亂檢舉${c.type === 'inspector' ? '衛生稽查員' : '無辜客人'},口碑 -5`, `False report on ${c.type === 'inspector' ? 'the inspector' : 'an innocent guest'}, rep −5`); popup(L('口碑 -5', 'Rep −5'), 640, 300, '#ff6b6b'); leave(c, c.type === 'inspector' ? '我就是稽查員欸…' : '神經病喔!', true, c.type === 'inspector' ? 'I AM the inspector…' : 'Are you serious?!'); }
-  if (G.pay) { G.stats.waste += G.pay.matchedCost; }
+  else { changeRep(-5); G.stats.angry++; addLog(`亂檢舉${c.type === 'inspector' ? '衛生稽查員' : '無辜客人'},口碑 -5`, `False report on ${c.type === 'inspector' ? 'the inspector' : 'an innocent guest'}, rep −5`); popup(L('口碑 -5', 'Rep −5'), 640, 300, '#ff6b6b'); const owed = G.pay ? G.pay.matchedCost : 0; leave(c, c.type === 'inspector' ? '我就是稽查員欸…' : '神經病喔!', true, c.type === 'inspector' ? 'I AM the inspector…' : 'Are you serious?!'); if (owed) G.stats.waste += owed; }
   if (c.type === 'byo') G.plate = G.plate.filter(it => it.key !== 'byo');
   resetPrep();
 }
@@ -1074,11 +1075,14 @@ function scrapOrder(c) {
 }
 
 function leave(c, line, angry, lineEn) {
+  if (!c) return;
+  c.leaving = true;
   scrapOrder(c);
   if (typeof line === 'string') { c.line = line; c.lineEn = lineEn || ''; }
   c.angry = angry;
   G.lastLine = { who: c.revealed ? '衛生局稽查員' : CTYPES[c.type].label, whoEn: c.revealed ? 'Inspector' : CTYPES[c.type].en, text: c.line, textZh: c.line, textEn: c.lineEn || '', angry, t: 2.5 };
   G.walkers.push({ c, x: c.x || COUNTER_X, dir: -1, sayT: 1.8 }); G.counter = null;
+  G.pay = null; G.bills = [];
 }
 
 // ---------- 更新 ----------
@@ -1143,22 +1147,26 @@ function update(dt) {
     if (b.flash > 0) b.flash -= dt;
   });
   // 客人
-  if (!G.counter && G.queue.length && G.t < G.dayLen + G.grace) { G.counter = G.queue.shift(); G.counter.x = G.counter.x || 400; G.counter.atCounter = 0; sfx('order'); }
+  if (!G.counter && G.queue.length && G.t < G.dayLen + G.grace) { G.counter = G.queue.shift(); G.counter.atCounter = 0; }
   G.queue.forEach((c, i) => {
-    c.waited = (c.waited || 0) + dt; c.patience -= dt * 0.4; c.tx = slotHome(i + 1);
-    if (c.hold > 0) c.hold -= dt;
-    else c.x += clamp(c.tx - c.x, -160 * dt, 160 * dt);
+    c.tx = slotHome(Math.min(2, i + 1));
+    stepGuest(c, c.tx, dt);
+    if (c.arrived && !c.leaving && Math.abs(c.x - c.tx) < 2) { c.waited = (c.waited || 0) + dt; c.patience -= dt * 0.4; }
   });
-  for (let i = G.queue.length - 1; i >= 0; i--) if (G.queue[i].patience <= 0) {
-    const c = G.queue.splice(i, 1)[0]; scrapOrder(c); G.stats.lost++; changeRep(-2); addLog(`${CTYPES[c.type].label}排太久,離開了`, `${CTYPES[c.type].en} waited too long and left`); G.walkers.push({ c, x: c.x, dir: -1 });
+  for (let i = G.queue.length - 1; i >= 0; i--) if (G.queue[i].arrived && G.queue[i].patience <= 0) {
+    const c = G.queue.splice(i, 1)[0];
+    c.leaving = true;
+    scrapOrder(c); G.stats.lost++; changeRep(-2); addLog(`${CTYPES[c.type].label}排太久,離開了`, `${CTYPES[c.type].en} waited too long and left`); G.walkers.push({ c, x: c.x, dir: -1 });
   }
   const c = G.counter;
-  if (c) {
-    if (c.hold > 0) c.hold -= dt;
-    else c.x += clamp(slotHome(0) - c.x, -160 * dt, 160 * dt);
-    c.atCounter += dt;
-    c.waited = (c.waited || 0) + dt; if (!G.pay) c.patience -= dt;
-    if (c.type === 'drunk' && !c.changed && c.handed && c.atCounter > 6 && !G.pay) {
+  if (c && !c.leaving) {
+    stepGuest(c, slotHome(0), dt);
+    if (c.arrived && Math.abs(c.x - slotHome(0)) < 2) {
+      c.atCounter += dt;
+      c.waited = (c.waited || 0) + dt;
+      if (!G.pay) c.patience -= dt;
+    }
+    if (c.type === 'drunk' && !c.changed && c.handed && c.arrived && c.atCounter > 6 && !G.pay) {
       c.changed = true; const ok = MENU.filter(k => stockOf(k) > 0); const k = ok.length ? pick(ok) : 'tempura'; c.order.items.push(k); (c.order.add = c.order.add || []).push(k); c.order.items.sort((a, b) => MENU.indexOf(a) - MENU.indexOf(b));
       setLine(c, `嗝…再加一份${ITEMS[k].name}!`, `Hic… one more ${ITEMS[k].en}!`); (c.need = c.need || []).push(k); popup(L('臨時加點', 'Add-on!'), 800, 140, '#ffb703');
     }
@@ -1305,12 +1313,34 @@ function bustSlot() {
   return { w: g.w - 8, h: g.h - foodH - 6, y: g.y + 2, foodH };
 }
 function slotHome(i) { const g = cardGeom(Math.max(0, Math.min(2, i))); return g.x + g.w / 2; }
+function ticketLive(c) { return !!(c && c.arrived && !c.leaving); }
+function ticketRectOf(c) {
+  const g = cardGeom(0);
+  const cx = c && c.x != null ? c.x : g.x + g.w / 2;
+  return { x: cx - g.w / 2, y: g.y, w: g.w, h: g.h };
+}
+function stepGuest(c, home, dt) {
+  if (!c || c.leaving) return;
+  if (c.hold > 0) { c.hold -= dt; return; }
+  const dx = home - c.x;
+  const step = 260 * dt;
+  if (Math.abs(dx) <= Math.max(2, step)) c.x = home;
+  else c.x += Math.sign(dx) * step;
+  if (!c.arrived && c.x === home) {
+    c.arrived = true;
+    if (!c.handed) { handOver(c); sfx('order'); }
+  }
+}
 function hitPad() { return window.innerWidth < 900 ? 16 : 0; }
 function railCustomers() { return (G.counter ? [G.counter] : []).concat(G.queue || []).slice(0, 3); }
 function custById(id) { return railCustomers().find(c => c.id === id) || null; }
 function ticketAt(p, pad = 0) {
   const list = railCustomers();
-  for (let i = list.length - 1; i >= 0; i--) if (hitR(p, cardGeom(i), pad)) return list[i];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const c = list[i];
+    if (!ticketLive(c)) continue;
+    if (hitR(p, ticketRectOf(c), pad)) return c;
+  }
   return null;
 }
 function canPlate(cid) {
@@ -1320,12 +1350,8 @@ function canPlate(cid) {
   return true;
 }
 function clipTickets() {
-  const front = G.counter;
-  const waitFront = front && !front.handed && (front.atCounter < 0.55 || G.pay);
   railCustomers().forEach(c => {
-    if (c.handed) return;
-    if (c === front && (front.atCounter < 0.55 || G.pay)) return;
-    if (c !== front && waitFront) return;
+    if (!c.arrived || c.handed || c.leaving) return;
     handOver(c);
   });
 }
@@ -1343,14 +1369,14 @@ function pullRackForCounter() {
 }
 function dropPreview(k, p) {
   const over = ticketAt(p);
-  if (over) return { c: over, ok: !!(over.handed && !(G.pay && over === G.counter) && mustLeft(over).includes(k)) };
-  const c = railCustomers().find(x => x.handed && !(G.pay && x === G.counter) && mustLeft(x).includes(k));
+  if (over) return { c: over, ok: !!(ticketLive(over) && over.handed && !(G.pay && over === G.counter) && mustLeft(over).includes(k)) };
+  const c = railCustomers().find(x => ticketLive(x) && x.handed && !(G.pay && x === G.counter) && mustLeft(x).includes(k));
   return c ? { c, ok: true } : null;
 }
-function ticketRect() { return cardGeom(0); }
+function ticketRect() { const c = G.counter; return ticketLive(c) ? ticketRectOf(c) : null; }
 function plateRect() { return { x: 988, y: 328, w: 272, h: 112 }; }
-function guestRect() { const g = cardGeom(0); return { x: g.x, y: g.y, w: g.w, h: g.h - 30 }; }
-function guestCardRect() { return cardGeom(0); }
+function guestRect() { const r = ticketRect(); return r ? { x: r.x, y: r.y, w: r.w, h: r.h - 30 } : null; }
+function guestCardRect() { return ticketRect(); }
 function nightGrade(s) {
   const served = s.served || 0, lost = s.lost || 0, happy = s.happy || 0, angry = s.angry || 0;
   const seen = served + lost;
@@ -1402,8 +1428,8 @@ function findDrag(p) {
   const rail = railCustomers();
   for (let i = rail.length - 1; i >= 0; i--) {
     const c = rail[i];
-    if (!c.handed || !(c.filled || []).length || (G.pay && c === G.counter)) continue;
-    if (hitR(p, cardGeom(i), pad)) return { type: 'ticket', cid: c.id };
+    if (!ticketLive(c) || !c.handed || !(c.filled || []).length || (G.pay && c === G.counter)) continue;
+    if (hitR(p, ticketRectOf(c), pad)) return { type: 'ticket', cid: c.id };
   }
   for (const k of [...MENU].reverse()) { const R = ITEM_RECT(k); if (R && hitR(p, R, pad) && stockOf(k) > 0) return { type: 'item', key: k }; }
   return null;
@@ -2222,7 +2248,7 @@ function drawRight() {
     const canBag = c && en && c.atCounter > 0.6;
     btn('bag', X, 508, 272, 46, L('裝袋', 'Bag'), A.bag, { enabled: !!canBag, clickable: en && !!c, size: canBag ? 22 : 15 });
     if (G.bagHint > 0) G.bagHint -= 1 / 60;
-    if (c && c.atCounter > 0.5) {
+    if (c && ticketLive(c) && Math.abs((c.x || 0) - slotHome(0)) < 8) {
       ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 562, 272, 136, 10); ctx.fill();
       text(L('這單', 'Order'), X + 8, 576, 13, '#ffd59a');
       if (c.type !== 'regular') { jarIcon('salt', X + 186, 576, 18, true); jarIcon('spicy', X + 212, 576, 18, c.order.spicy); jarIcon('basil', X + 238, 576, 18, c.order.basil); }
@@ -2377,27 +2403,26 @@ function drawRail() {
     text(L('客人會站上來，下面是想吃的', 'Guests stand up top. Order underneath.'), 640, 120, 16, '#f3e6d0', 'center', 'normal');
     return;
   }
-  const now = performance.now() / 1000;
-  list.slice(0, 3).forEach((c, i) => {
-    const g = cardGeom(i);
-    const born = c.railBorn ?? (c.railBorn = now);
+  list.slice(0, 3).forEach((c) => {
+    const bust = bustSlot();
+    const px = c.x == null ? W + 160 : c.x;
+    drawBust(c, px - bust.w / 2, bust.y, bust.w, bust.h);
+    if (!ticketLive(c)) return;
+    const g = ticketRectOf(c);
     const x = g.x, y = g.y, w = g.w, h = g.h;
-    const foodH = bustSlot().foodH, bust = bustSlot();
+    const foodH = bust.foodH;
     const ratio = clamp(c.patience / c.max, 0, 1), atC = c === G.counter;
     const col = ratio > 0.5 ? '#2f6b3a' : ratio > 0.25 ? '#a86b12' : '#9a2b2b';
-    const home = g.x + g.w / 2;
     ctx.fillStyle = '#fffaf4';
     if (IMG.orderSlip) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.orderSlip, x, y + h - foodH, w, foodH); ctx.restore(); }
     else { rr(x, y + h - foodH, w, foodH, 4); ctx.fill(); }
     ctx.strokeStyle = atC ? '#c8962e' : '#2b1a0e'; ctx.lineWidth = atC ? 3 : 1.5;
     rr(x, y + h - foodH, w, foodH, 4); ctx.stroke();
-    const px = (c.hold > 0 ? -160 : (c.x == null ? -160 : c.x));
-    drawBust(c, px - bust.w / 2, bust.y, bust.w, bust.h);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.fillRect(x + 10, y + h - foodH - 4, w - 20, 3);
     ctx.fillStyle = col;
     ctx.fillRect(x + 10, y + h - foodH - 4, (w - 20) * ratio, 3);
-    ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][i] || '#5c636a';
+    ctx.fillStyle = atC ? '#c8962e' : '#1d7a6e';
     ctx.fillRect(x + 2, y + h - foodH + 3, 4, foodH - 6);
     const short = shortItems(c);
     const stuck = atC && short.length && !orderHeld(c) && !fillableLeft(c).length;
@@ -2745,7 +2770,7 @@ function drawFx() {
     if (drag.type === 'item') {
       pv = dropPreview(drag.key, { x: drag.x, y: drag.y });
       if (pv) {
-        const g = cardGeom(railCustomers().indexOf(pv.c));
+        const g = ticketRectOf(pv.c);
         ctx.save(); ctx.strokeStyle = pv.ok ? '#ff9f1c' : '#d62828'; ctx.lineWidth = 3; ctx.setLineDash([5, 4]);
         rr(g.x - 3, g.y - 3, g.w + 6, g.h + 6, 4); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
       }
@@ -2780,8 +2805,8 @@ function drawFx() {
     let a = null, b = null;
     if (ml.length) { a = ITEM_POS(ml[0]); const rc = ticketRect(); b = [rc.x + rc.w / 2, rc.y + rc.h / 2]; }
     else if (!G.fryer.some(n => n.some(it => it.cid === c.id)) && !G.plate.length) { const rc = ticketRect(); a = [rc.x + 40, rc.y + 30]; b = [560, 420]; }
-    else if (laterNeed && mineIn) { const g = cardGeom(railCustomers().indexOf(laterNeed)); a = ITEM_POS(mustLeft(laterNeed)[0]); b = [g.x + g.w / 2, g.y + 50]; }
-    else if (laterFry && mineIn) { const g = cardGeom(railCustomers().indexOf(laterFry)); a = [g.x + 36, g.y + 40]; b = [560, 420]; }
+    else if (laterNeed && mineIn) { const rc = ticketRectOf(laterNeed); a = ITEM_POS(mustLeft(laterNeed)[0]); b = [rc.x + rc.w / 2, rc.y + 50]; }
+    else if (laterFry && mineIn) { const rc = ticketRectOf(laterFry); a = [rc.x + 36, rc.y + 40]; b = [560, 420]; }
     else {
       const ri = G.fryer.findIndex((n, j) => n.length && G.baskets[j].inOil && (G.baskets[j].p || 0) >= SH_LO);
       if (ri >= 0) { const r = slotRect(ri); a = [r.x + r.w / 2, r.y + 36]; b = canPlate(G.fryer[ri][0].cid) ? [1140, 350] : [346, 620]; }
