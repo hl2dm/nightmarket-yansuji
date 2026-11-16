@@ -1133,7 +1133,7 @@ function update(dt) {
   if (G.handAnim) { G.handAnim.t += dt / SPEED; if (G.handAnim.t > 0.9) G.handAnim = null; }
   if (G.mustFlash > 0) G.mustFlash -= dt / SPEED;
   if (G.lastLine) { G.lastLine.t -= dt; if (G.lastLine.t <= 0) G.lastLine = null; }
-  G.walkers.forEach(w => { w.x += w.dir * 220 * dt; if (w.sayT) w.sayT -= dt; }); G.walkers = G.walkers.filter(w => w.x > 180 && w.x < 1400);
+  G.walkers.forEach(w => { w.x += w.dir * 220 * dt; if (w.sayT) w.sayT -= dt; }); G.walkers = G.walkers.filter(w => w.x > -180 && w.x < W + 180);
   // 名單走完、攤上沒人，就收。不要空等倒數。
   if (!G.counter && !G.queue.length && !(G.schedule && G.schedule.length) && G.t > 4) {
     if (!G.endBanner) { G.endBanner = true; addLog('沒客人了，收攤', 'No one else coming. Closing.'); }
@@ -1214,6 +1214,11 @@ function hitR(p, r, pad = 0) { return !!r && p.x >= r.x - pad && p.x <= r.x + r.
 function cardGeom(i) {
   const w = 248, gap = 12, h = 232;
   return { x: 176 + i * (w + gap), y: 46, w, h };
+}
+function bustSlot() {
+  const g = cardGeom(0);
+  const foodH = 30;
+  return { w: g.w - 8, h: g.h - foodH - 6, y: g.y + 2, foodH };
 }
 function slotHome(i) { const g = cardGeom(Math.max(0, Math.min(2, i))); return g.x + g.w / 2; }
 function hitPad() { return window.innerWidth < 900 ? 16 : 0; }
@@ -1473,9 +1478,9 @@ function drawBust(c, x, y, w, h) {
   const ratio = (c.patience || 1) / Math.max(1, c.max || 1);
   if (ratio < 0.3) ctx.filter = 'sepia(0.45) saturate(1.35) hue-rotate(-14deg)';
   const scale = Math.min(w / im.width, h / im.height);
-  const dw = im.width * scale, dh = im.height * scale;
+  const dw = Math.round(im.width * scale), dh = Math.round(im.height * scale);
   const bob = Math.sin(performance.now() / 320 + (c.id || 0)) * 1;
-  ctx.drawImage(im, x + (w - dw) / 2, y + h - dh + bob, dw, dh);
+  ctx.drawImage(im, Math.round(x + (w - dw) / 2), Math.round(y + h - dh + bob), dw, dh);
   ctx.restore();
 }
 function blitCover(im, x, y, w, h) {
@@ -1654,8 +1659,9 @@ function drawScene(time) {
   drawRail();
   drawNotebook(10, 46);
   G.walkers.forEach(w => {
-    drawBust(w.c, w.x - 40, 58, 88, 112);
-    if (w.sayT > 0 && w.c && w.c.line) text(oneLine(L(w.c.line, w.c.lineEn || w.c.line), 160, 13), w.x, 48, 13, '#fff8e7', 'center');
+    const b = bustSlot();
+    drawBust(w.c, w.x - b.w / 2, b.y, b.w, b.h);
+    if (w.sayT > 0 && w.c && w.c.line) text(oneLine(L(w.c.line, w.c.lineEn || w.c.line), 150, 13), w.x + b.w * 0.28, b.y + 18, 13, '#fff8e7', 'center');
   });
   if (IMG.cat && G.cat && G.cat.nap <= 0) {
     const im = IMG.cat, hh = 36, ww = im.width / im.height * hh;
@@ -2200,28 +2206,29 @@ function drawRail() {
     const born = c.railBorn ?? (c.railBorn = now);
     const slide = (1 - clamp((now - born) * 4, 0, 1)) * 24;
     const x = g.x + slide, y = g.y, w = g.w, h = g.h;
-    const foodH = 30, bustH = h - foodH;
+    const foodH = bustSlot().foodH, bust = bustSlot();
     const ratio = clamp(c.patience / c.max, 0, 1), atC = c === G.counter;
     const col = ratio > 0.5 ? '#2f6b3a' : ratio > 0.25 ? '#a86b12' : '#9a2b2b';
-    ctx.fillStyle = '#fffaf4';
-    rr(x, y, w, h, 4); ctx.fill();
-    ctx.strokeStyle = atC ? '#c8962e' : '#2b1a0e'; ctx.lineWidth = atC ? 3 : 2;
-    rr(x, y, w, h, 4); ctx.stroke();
     const home = x + w / 2;
     const far = Math.abs((c.x || home) - home) > 30;
-    if (!far) drawBust(c, x + 2, y + 2, w - 4, bustH - 4);
+    const bx = far ? (c.x || home) - bust.w / 2 : x + (w - bust.w) / 2;
+    drawBust(c, bx, bust.y, bust.w, bust.h);
+    ctx.fillStyle = '#fffaf4';
+    rr(x, y + h - foodH, w, foodH, 4); ctx.fill();
+    ctx.strokeStyle = atC ? '#c8962e' : '#2b1a0e'; ctx.lineWidth = atC ? 3 : 1.5;
+    rr(x, y + h - foodH, w, foodH, 4); ctx.stroke();
     ctx.strokeStyle = '#2b1a0e'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(x + 8, y + bustH); ctx.lineTo(x + w - 8, y + bustH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 8, y + h - foodH); ctx.lineTo(x + w - 8, y + h - foodH); ctx.stroke();
     ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][i] || '#5c636a';
     rr(x + 6, y + 6, 20, 16, 3); ctx.fill();
     text(String(i + 1), x + 16, y + 14, 12, '#fff', 'center');
     text(`${Math.max(0, Math.ceil(c.patience))}${L('秒', 's')}`, x + w - 8, y + 16, 12, col, 'right');
     const short = shortItems(c);
     const stuck = atC && short.length && !orderHeld(c) && !fillableLeft(c).length;
-    const fy = y + bustH + foodH / 2;
+    const fy = y + h - foodH / 2;
     if (stuck) {
-      btn('swapOrder', x + 6, y + bustH + 4, 114, 22, L('換單', 'Swap'), A.swapOrder, { enabled: !c.swapped, color: '#2a6f6a', size: 12 });
-      btn('sendAway', x + 126, y + bustH + 4, 116, 22, L('請離開', 'Send off'), A.sendAway, { color: '#4a4a4a', size: 12 });
+      btn('swapOrder', x + 6, y + h - foodH + 4, 114, 22, L('換單', 'Swap'), A.swapOrder, { enabled: !c.swapped, color: '#2a6f6a', size: 12 });
+      btn('sendAway', x + 126, y + h - foodH + 4, 116, 22, L('請離開', 'Send off'), A.sendAway, { color: '#4a4a4a', size: 12 });
     } else if (c.type === 'regular' && !c.swapped && !c.handed && !short.length) {
       text(L('看黃紙', 'Yellow note'), x + 12, fy, 16, '#7a4b00');
     } else {
@@ -2241,10 +2248,9 @@ function drawRail() {
       iconRow(ents, x + 8, fy, s2, 4, w - 48);
     }
     if (!stuck && c.type !== 'regular') { jarIcon('spicy', x + w - 28, fy, 14, c.order.spicy); jarIcon('basil', x + w - 12, fy, 14, c.order.basil); }
-    if (atC && !stuck && stockBlocked(c).length) btn('sellShort', x + w - 70, y + bustH + 4, 60, 20, L('照賣', 'Serve'), A.sellShort, { color: '#6b4226', size: 11 });
-    else if (atC && !stuck && (c.type === 'byo' || c.sus)) btn('report', x + w - 70, y + bustH + 4, 60, 20, L('檢舉', 'Report'), A.report, { color: '#3b5b92', size: 11 });
+    if (atC && !stuck && stockBlocked(c).length) btn('sellShort', x + w - 70, y + h - foodH + 4, 60, 20, L('照賣', 'Serve'), A.sellShort, { color: '#6b4226', size: 11 });
+    else if (atC && !stuck && (c.type === 'byo' || c.sus)) btn('report', x + w - 70, y + h - foodH + 4, 60, 20, L('檢舉', 'Report'), A.report, { color: '#3b5b92', size: 11 });
     if (canFryTicket(c) && !atC) text(L('可下鍋', 'Fry'), x + 8, y + h - 10, 11, '#8a5a10');
-    if (far) drawBust(c, (c.x || home) - (w - 4) / 2, y + 2, w - 4, bustH - 4);
   });
   if (list.length > 3) text(`+${list.length - 3}`, 176 + 3 * 260, 58, 13, '#ffd166');
 }
