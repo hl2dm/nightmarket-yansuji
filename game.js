@@ -32,7 +32,31 @@ function assetPath(src) {
   const base = (typeof window !== 'undefined' && window.__ASSET_BASE) || '/';
   return base + rel;
 }
-function loadImg(k, src, trim) { const im = new Image(); im.onload = () => { IMG[k] = trim ? prepFood(im) : im; }; im.src = assetPath(src); }
+function loadImg(k, src, trim) { const im = new Image(); im.onload = () => { IMG[k] = k.startsWith('c_') ? prepPortrait(im) : trim ? prepFood(im) : im; }; im.src = assetPath(src); }
+// All customer portraits share a 128px grid and baseline. Preserve supplied alpha;
+// never chroma-key clothing, hair or skin as if they were a background.
+function prepPortrait(im) {
+  const source = document.createElement('canvas'); source.width = im.width; source.height = im.height;
+  const g = source.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0);
+  let data; try { data = g.getImageData(0, 0, im.width, im.height); } catch (e) { return im; }
+  const pixels = data.data;
+  let left = im.width, top = im.height, right = -1, bottom = -1;
+  for (let y = 0; y < im.height; y++) for (let x = 0; x < im.width; x++) {
+    const alpha = (y * im.width + x) * 4 + 3;
+    if (pixels[alpha] < 128) { pixels[alpha] = 0; continue; }
+    pixels[alpha] = 255;
+    left = Math.min(left, x); right = Math.max(right, x);
+    top = Math.min(top, y); bottom = Math.max(bottom, y);
+  }
+  if (right < left || bottom < top) return im;
+  g.putImageData(data, 0, 0);
+  const portrait = document.createElement('canvas'); portrait.width = portrait.height = 128;
+  const p = portrait.getContext('2d'); p.imageSmoothingEnabled = false;
+  const sw = right - left + 1, sh = bottom - top + 1, scale = Math.min(120 / sw, 124 / sh);
+  const dw = Math.round(sw * scale), dh = Math.round(sh * scale);
+  p.drawImage(source, left, top, sw, sh, Math.round((128 - dw) / 2), 128 - dh, dw, dh);
+  return portrait;
+}
 function prepFood(im) {
   const w = im.width, h = im.height; if (!w || !h) return im;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -1434,7 +1458,8 @@ function drawPerson(c, x, scale = 1, mood = null, y = 400) {
   const im = custImg(c);
   if (!im) return;
   const bob = Math.sin(performance.now() / 300 + c.id) * 2; const h = 150 * s, w = im.width / im.height * h;
-  ctx.save(); if (mood < 0.3) ctx.filter = 'sepia(0.4) saturate(1.4) hue-rotate(-15deg)';
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  if (mood < 0.3) ctx.filter = 'sepia(0.4) saturate(1.4) hue-rotate(-15deg)';
   ctx.drawImage(im, x - w / 2, y - h + bob + 4, w, h); ctx.restore();
   if (mood < 0.3) text('!', x + w / 2 - 8, y - h + 16, 18, '#ff6b6b', 'center');
 }
@@ -2170,6 +2195,7 @@ function drawRail() {
     text(String(i + 1), x + w / 2, y - 1, 10, '#fff8e7', 'center');
     const im = custImg(c);
     ctx.save(); ctx.beginPath(); ctx.arc(x + 16, y + 16, 11, 0, 7); ctx.clip();
+    ctx.imageSmoothingEnabled = false;
     if (im) ctx.drawImage(im, im.width * 0.28, im.height * 0.02, im.width * 0.44, im.width * 0.44, x + 5, y + 5, 22, 22);
     else { ctx.fillStyle = '#f6d5b5'; ctx.fillRect(x + 5, y + 5, 22, 22); }
     ctx.restore();
