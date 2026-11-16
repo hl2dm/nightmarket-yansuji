@@ -323,6 +323,7 @@ function newNight() { refreshMenu(G.night);
     const have = ALL_MENU.reduce((a, k) => a + ((G.inv[k] && G.inv[k].fresh) || 0) + ((G.inv[k] && G.inv[k].old) || 0), 0);
     if (!have) Object.keys(gift).forEach(k => { if (G.inv[k]) G.inv[k].fresh += gift[k]; });
   }
+  if (G.notice === 'quiet') G.newsRead = true;
   G.creditWarned = false;
 }
 // ---- 存檔 ----
@@ -1264,12 +1265,12 @@ let held = null;
 function toCanvas(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; }
 function hitR(p, r, pad = 0) { return !!r && p.x >= r.x - pad && p.x <= r.x + r.w + pad && p.y >= r.y - pad && p.y <= r.y + r.h + pad; }
 function cardGeom(i) {
-  const w = 248, gap = 12, h = 232;
-  return { x: 176 + i * (w + gap), y: 46, w, h };
+  const w = 280, gap = 36, h = 236;
+  return { x: 168 + i * (w + gap), y: 44, w, h };
 }
 function bustSlot() {
   const g = cardGeom(0);
-  const foodH = 30;
+  const foodH = 52;
   return { w: g.w - 8, h: g.h - foodH - 6, y: g.y + 2, foodH };
 }
 function slotHome(i) { const g = cardGeom(Math.max(0, Math.min(2, i))); return g.x + g.w / 2; }
@@ -1746,8 +1747,8 @@ function drawCustomerRow(time, theme) {
 function drawScene(time) {
   drawCustomerRow(time, G.theme || 'fair');
   ctx.fillStyle = 'rgba(14,8,5,0.97)'; ctx.fillRect(0, STRIP.y1, W, H - STRIP.y1);
+  drawNotebook(8, 198);
   drawRail();
-  drawNotebook(10, 48);
   G.walkers.forEach(w => {
     const b = bustSlot();
     drawBust(w.c, w.x - b.w / 2, b.y, b.w, b.h);
@@ -1928,7 +1929,7 @@ function drawLeft() {
     const priceSize = tight ? 10 : 12;
     if (short && k !== 'byo') text(oneLine(G.rescueUsed ? L('沒了', 'Out') : L(`補 $${rescueCost(k)}`, `+$${rescueCost(k)}`), nameMax, priceSize), tx, priceY, priceSize, '#ffb4a8');
     else {
-      const stock = k === 'byo' ? '' : `×${q}${v.old ? '+' + v.old : ''}`;
+      const stock = k === 'byo' ? '' : (v.old ? `剩${q} 舊${v.old}` : `剩${q}`);
       const price = `$${salePrice(k)}`;
       ctx.font = `normal ${priceSize}px ${FONT}`;
       const both = stock ? `${price} ${stock}` : price;
@@ -2020,6 +2021,13 @@ function drawTank() {
   });
   ctx.restore();
   if (G.oilChange > 0) { ctx.fillStyle = 'rgba(0,0,0,0.65)'; rr(430, 390, 420, 72, 12); ctx.fill(); text(`${L('換油中', 'Changing oil')} ${G.oilChange.toFixed(1)}`, 640, 426, 26, '#fff', 'center'); }
+  const frontTop = 622;
+  if (frontTop < 712) {
+    ctx.fillStyle = '#2a180e';
+    ctx.fillRect(328, frontTop, 636, 712 - frontTop);
+    ctx.fillStyle = '#6b4226';
+    ctx.fillRect(328, frontTop, 636, 8);
+  }
 }
 
 function slotState(it) {
@@ -2399,7 +2407,7 @@ function drawRail() {
     else if (atC && !stuck && (c.type === 'byo' || c.sus)) btn('report', x + w - 70, y + h - foodH + 4, 60, 20, L('檢舉', 'Report'), A.report, { color: '#3b5b92', size: 11 });
     if (canFryTicket(c) && !atC) text(L('可下鍋', 'Fry'), x + 8, y + h - 10, 11, '#8a5a10');
   });
-  if (list.length > 3) text(`+${list.length - 3}`, 176 + 3 * 260, 58, 13, '#ffd166');
+  if (list.length > 3) text(`+${list.length - 3}`, cardGeom(2).x + cardGeom(2).w + 10, 70, 13, '#ffd166');
 }
 
 function drawBuyMeter(x, y, w) {
@@ -2419,15 +2427,15 @@ function infoBar(y) {
 
 function drawTitle(time) {
   drawBackground(time, 'stall_front');
-  ctx.fillStyle = 'rgba(10,5,3,0.78)'; rr(220, 150, 840, 540, 20); ctx.fill();
-  ctx.shadowColor = '#ff5a36'; ctx.shadowBlur = 24; text(L('夜市攤位 · 鹽酥雞攤', 'Night market · fry stall'), 640, 188, 40, '#ffcf6b', 'center'); ctx.shadowBlur = 0;
-  text(L(`本金 $${START_CASH}　買斷 $${STALL_PRICE}`, `Start $${START_CASH}    Buyout $${STALL_PRICE}`), 640, 248, 20, '#ffd59a', 'center', 'normal');
-  text(L('攤位不是你的。每週收攤扣房租，連續兩週付不出就收回。', "The stall isn't yours. Rent comes out every week. Miss two and it's gone."), 640, 300, 18, '#f3e6d0', 'center', 'normal');
-  text(L('第一週：把單補滿，下鍋，金黃就撈，撒鹽，收錢。', 'Week one: fill the ticket, fry, lift at gold, salt, take the cash.'), 640, 338, 18, '#ffd166', 'center', 'normal');
+  ctx.fillStyle = 'rgba(10,5,3,0.82)'; rr(260, 108, 760, 340, 16); ctx.fill();
+  ctx.shadowColor = '#ff5a36'; ctx.shadowBlur = 24; text(L('夜市攤位 · 鹽酥雞攤', 'Night market · fry stall'), 640, 156, 36, '#ffcf6b', 'center'); ctx.shadowBlur = 0;
+  text(L(`本金 $${START_CASH}　買斷 $${STALL_PRICE}`, `Start $${START_CASH}    Buyout $${STALL_PRICE}`), 640, 206, 18, '#ffd59a', 'center', 'normal');
+  text(L('攤位不是你的。每週收攤扣房租，連續兩週付不出就收回。', "The stall isn't yours. Rent comes out every week. Miss two and it's gone."), 640, 248, 16, '#f3e6d0', 'center', 'normal');
+  text(L('第一週：把單補滿，下鍋，金黃就撈，撒鹽，收錢。', 'Week one: fill the ticket, fry, lift at gold, salt, take the cash.'), 640, 280, 16, '#ffd166', 'center', 'normal');
   const sv = loadSave(true);
-  if (sv) { btn('continue', 400, 530, 230, 56, L(`繼續第 ${sv.night} 週`, `Continue week ${sv.night}`), A.cont, { size: 22 }); btn('newRun', 650, 530, 230, 56, L('重新開始', 'New game'), A.newRun, { size: 20, color: '#6b4226' });
-    text(L(`存檔：現金 $${Math.round(sv.cash)}${sv.debt ? ` · 欠 $${sv.debt}` : ''} · 升級 ${sv.upgrades.length} 項`, `Save: $${Math.round(sv.cash)} cash${sv.debt ? ` · owe $${sv.debt}` : ''} · ${sv.upgrades.length} upgrades`), 640, 612, 15, '#bbb', 'center', 'normal'); }
-  else btn('start', 470, 420, 340, 76, L('開始進貨', 'Buy stock'), A.start, { size: 30, pulse: true });
+  if (sv) { btn('continue', 340, 330, 250, 52, L(`繼續第 ${sv.night} 週`, `Continue week ${sv.night}`), A.cont, { size: 20 }); btn('newRun', 640, 330, 250, 52, L('重新開始', 'New game'), A.newRun, { size: 18, color: '#6b4226' });
+    text(L(`存檔：現金 $${Math.round(sv.cash)}${sv.debt ? ` · 欠 $${sv.debt}` : ''} · 升級 ${sv.upgrades.length} 項`, `Save: $${Math.round(sv.cash)} cash${sv.debt ? ` · owe $${sv.debt}` : ''} · ${sv.upgrades.length} upgrades`), 640, 410, 14, '#bbb', 'center', 'normal'); }
+  else btn('start', 470, 330, 340, 64, L('開始進貨', 'Buy stock'), A.start, { size: 26, pulse: true });
 }
 
 function drawNewsCard(time) {
@@ -2790,7 +2798,6 @@ function render(time) {
       ctx.fillStyle = `rgba(2,6,18,${flick})`; ctx.fillRect(0, 40, W, H - 40);
     }
     if (G.forkOpen) drawFork();
-    drawFx();
   }
   drawVol();
   G.popups.forEach(p => { ctx.globalAlpha = clamp(p.life, 0, 1); text(p.text, p.x, p.y, 24, p.color, 'center'); ctx.globalAlpha = 1; });
@@ -2800,6 +2807,18 @@ function render(time) {
   if (G.veil > 0.02) { ctx.fillStyle = `rgba(6,3,1,${G.veil})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
   drawCursor();
+  if (window.innerHeight > window.innerWidth + 40) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = 'rgba(8,4,2,0.94)';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = '#ffcf6b';
+    ctx.font = `28px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('請把手機橫過來', cv.width / 2, cv.height / 2);
+    ctx.restore();
+  }
 }
 
 // ---------- 主迴圈 ----------
