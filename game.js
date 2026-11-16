@@ -339,7 +339,7 @@ function loadSave(peek) {
 // 固定 9 個網位:大網 2×2 佔上兩排(編號 1–3),小網 1×1 在最下排(編號 4–9)。
 // 滿配 3 大 + 6 小 = 12 + 6 = 18 格,正好填滿 6×3。升級只「解鎖」網位,不重排、不改編號。
 const GRID = { x: 266, y: 304, cols: 6, rows: 3, cw: 124, ch: 116 };
-const STRIP = { y0: 42, y1: 196, base: 188, x1: 1280 }, COUNTER_X = 390;
+const STRIP = { y0: 42, y1: 228, base: 220, x1: 1280 }, COUNTER_X = 390;
 const RAIL = { x: 8, y: 44, w: 1264, h: 148 };
 function basketLayout() {
   // v45：欄0 雞排大網、欄1 其他肉大網、欄2 兩個小網。smallNet 開欄3 再兩個小網。
@@ -356,8 +356,8 @@ function basketLayout() {
 const COLX = [392, 540, 688, 836];
 function cellRect(b) {
   const x = COLX[b.col] - 64;
-  if (b.s === 'L') return { x, y: 248, w: 128, h: 156 };
-  return { x, y: 248 + (b.sub || 0) * 80, w: 128, h: 74 };
+  if (b.s === 'L') return { x, y: 274, w: 128, h: 148 };
+  return { x, y: 274 + (b.sub || 0) * 76, w: 128, h: 70 };
 }
 function slotRect(i) { return cellRect(G.baskets[i]); }
 function freeBasket(k) { // v41:只找空的、不在油裡的網
@@ -1210,10 +1210,10 @@ let held = null;
 function toCanvas(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; }
 function hitR(p, r, pad = 0) { return !!r && p.x >= r.x - pad && p.x <= r.x + r.w + pad && p.y >= r.y - pad && p.y <= r.y + r.h + pad; }
 function cardGeom(i) {
-  const w = 360, gap = 8, h = 132;
-  return { x: 172 + i * (w + gap), y: 52, w, h };
+  const w = 248, gap = 12, h = 176;
+  return { x: 176 + i * (w + gap), y: 46, w, h };
 }
-function slotHome(i) { const g = cardGeom(Math.max(0, Math.min(2, i))); return g.x + g.w - 54; }
+function slotHome(i) { const g = cardGeom(Math.max(0, Math.min(2, i))); return g.x + g.w / 2; }
 function hitPad() { return window.innerWidth < 900 ? 16 : 0; }
 function railCustomers() { return (G.counter ? [G.counter] : []).concat(G.queue || []).slice(0, 3); }
 function custById(id) { return railCustomers().find(c => c.id === id) || null; }
@@ -1257,17 +1257,17 @@ function dropPreview(k, p) {
   return c ? { c, ok: true } : null;
 }
 function ticketRect() { return cardGeom(0); }
-function plateRect() { return { x: 988, y: 252, w: 272, h: 148 }; }
-function guestRect() { const g = cardGeom(0); return { x: g.x + g.w - 112, y: g.y, w: 112, h: g.h }; }
+function plateRect() { return { x: 988, y: 274, w: 272, h: 136 }; }
+function guestRect() { const g = cardGeom(0); return { x: g.x, y: g.y, w: g.w, h: g.h - 58 }; }
 function guestCardRect() { return cardGeom(0); }
 function billAnchor() { return { x: 1124, y: 470 }; }
 function cashboxRect() { return { x: 988, y: 640, w: 272, h: 48 }; }
 function rackRect(i) {
-  const n = 4, w = 148, h = 118, gap = 8, x0 = 324, y = 492;
+  const n = 4, w = 148, h = 110, gap = 8, x0 = 324, y = 512;
   const col = Math.min(i, n - 1), spill = Math.max(0, i - (n - 1));
   return { x: x0 + col * (w + gap) + spill * 12, y: y + spill * 4, w, h };
 }
-function overFryer(p) { return p.x > 320 && p.x < 960 && p.y > 230 && p.y < 470; }
+function overFryer(p) { return p.x > 320 && p.x < 960 && p.y > 256 && p.y < 500; }
 const CHROME = /^(temp_|oil$|vol|lang|report|swap|send|pay|dump|refuse|up_|buy_|unbuy_|start|continue|newRun|open|next|toShop|bag)/;
 function findDrag(p) {
   const pad = hitPad();
@@ -1464,15 +1464,18 @@ function drawPerson(c, x, scale = 1, mood = null, y = 400) {
 }
 function drawBust(c, x, y, w, h) {
   const im = custImg(c);
+  if (!im) return;
   ctx.save();
-  ctx.beginPath(); rr(x, y, w, h, 8); ctx.clip();
-  ctx.fillStyle = '#3a241c'; ctx.fillRect(x, y, w, h);
-  if (im) {
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(im, 0, 0, im.width, im.height * 0.62, x, y, w, h);
-  }
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.imageSmoothingEnabled = false;
+  const ratio = (c.patience || 1) / Math.max(1, c.max || 1);
+  if (ratio < 0.3) ctx.filter = 'sepia(0.45) saturate(1.35) hue-rotate(-14deg)';
+  const crop = 0.5;
+  const scale = h / (im.height * crop);
+  const dw = im.width * scale, dh = im.height * scale;
+  const bob = Math.sin(performance.now() / 320 + (c.id || 0)) * 1;
+  ctx.drawImage(im, x + (w - dw) / 2, y + h - dh * crop + bob, dw, dh);
   ctx.restore();
-  ctx.strokeStyle = 'rgba(255,214,160,0.4)'; ctx.lineWidth = 1.5; rr(x, y, w, h, 8); ctx.stroke();
 }
 
 function chip(key, x, y, d = null, w = 92, h = 34, it = null) {
@@ -1639,7 +1642,7 @@ function drawScene(time) {
   drawCustomerRow(time, G.theme || 'fair');
   ctx.fillStyle = 'rgba(14,8,5,0.97)'; ctx.fillRect(0, STRIP.y1, W, H - STRIP.y1);
   drawRail();
-  drawNotebook(10, 52);
+  drawNotebook(10, 46);
   G.walkers.forEach(w => {
     drawBust(w.c, w.x - 40, 58, 88, 112);
     if (w.sayT > 0 && w.c && w.c.line) text(oneLine(L(w.c.line, w.c.lineEn || w.c.line), 160, 13), w.x, 48, 13, '#fff8e7', 'center');
@@ -1652,12 +1655,12 @@ function drawScene(time) {
 }
 function drawNotebook(x, y) {
   ctx.save();
-  ctx.fillStyle = '#fff3a8'; rr(x, y, 154, 132, 6); ctx.fill();
-  ctx.strokeStyle = '#e1c56a'; ctx.lineWidth = 1; rr(x, y, 154, 132, 6); ctx.stroke();
-  text(L('熟客老樣子', 'Regular’s usual'), x + 8, y + 16, 13, '#7a4b00');
-  iconRow(countEnts(G.regularOrder.items, 'self'), x + 8, y + 58, 36, 2, 138);
-  jarIcon('spicy', x + 18, y + 108, 18, G.regularOrder.spicy);
-  jarIcon('basil', x + 44, y + 108, 18, G.regularOrder.basil);
+  ctx.fillStyle = '#fff3a8'; rr(x, y, 154, 176, 6); ctx.fill();
+  ctx.strokeStyle = '#e1c56a'; ctx.lineWidth = 1; rr(x, y, 154, 176, 6); ctx.stroke();
+  text(L('熟客老樣子', 'Regular’s usual'), x + 8, y + 18, 13, '#7a4b00');
+  iconRow(countEnts(G.regularOrder.items, 'self'), x + 8, y + 78, 40, 2, 138);
+  jarIcon('spicy', x + 18, y + 148, 20, G.regularOrder.spicy);
+  jarIcon('basil', x + 46, y + 148, 20, G.regularOrder.basil);
   ctx.restore();
 }
 function oneLine(s, maxW, size) {
@@ -1788,9 +1791,9 @@ function countEnts(keys, st) { const m = countBy(keys); return Object.keys(m).ma
 
 // ---------- 左欄:食材、油溫、換油、熟客筆記 ----------
 function drawLeft() {
-  panel(8, 206, 300, 506, L('展示櫃', 'Case'));
-  text(L('肉', 'Meat'), 200, 226, 14, '#ffb067', 'right');
-  text(L('菜', 'Veg'), 292, 226, 14, '#9be7b0', 'right');
+  panel(8, 232, 300, 480, L('展示櫃', 'Case'));
+  text(L('肉', 'Meat'), 200, 252, 14, '#ffb067', 'right');
+  text(L('菜', 'Veg'), 292, 252, 14, '#9be7b0', 'right');
   const keys = [...MENU], mlk = [];
   railCustomers().forEach(c => { if (!c.handed || (G.pay && c === G.counter)) return; mustLeft(c).forEach(k => { if (!mlk.includes(k)) mlk.push(k); }); });
   const lay = caseLayout();
@@ -1868,7 +1871,7 @@ function drawBowl(bi, B, x, y, w, h, cid) {
 // ---------- 中央:俯視油槽 ----------
 function drawTank() {
   const old = G.oilUse > OIL_LIMIT, now = performance.now() / 1000;
-  const X = 316, Y = 216, TW = 648, TH = 248;
+  const X = 316, Y = 242, TW = 648, TH = 236;
   const tankI = IMG.tank2 || IMG.tankTop;
   if (tankI) { ctx.save(); if (old) ctx.filter = 'brightness(0.7) sepia(0.6)'; ctx.drawImage(tankI, X - 6, Y - 4, TW + 12, TH + 8); ctx.restore();
     if (fried().length) { ctx.fillStyle = `rgba(255,230,160,${0.05 + 0.03 * Math.sin(now * 9)})`; rr(X + 40, Y + 40, TW - 80, TH - 80, 10); ctx.fill(); } }
@@ -1895,7 +1898,7 @@ function drawTank() {
   const cid = G.counter && !G.pay ? G.counter.id : -1;
   for (let i = 0; i < G.fryer.length; i++) if (!G.baskets[i].locked) drawSlot(i, G.fryer[i], now, cid);
   ctx.save();
-  ctx.fillStyle = 'rgba(30,16,4,0.45)'; rr(316, 472, 648, 136, 10); ctx.fill();
+  ctx.fillStyle = 'rgba(30,16,4,0.45)'; rr(316, 486, 648, 128, 10); ctx.fill();
   const netI = IMG.basketTop || IMG.smallNet;
   for (let i = 0; i < 4; i++) {
     const box = rackRect(i);
@@ -1991,12 +1994,12 @@ function shaker(id, x, y, label, body, cap, on, en) {
 
 // ---------- 右欄:櫃台客人、起鍋盤、收銀 ----------
 function drawRight() {
-  panel(976, 206, 296, 506, '');
+  panel(976, 232, 296, 480, '');
   const c = G.counter, X = 988;
   if (!G.pay) {
-    text(L('起鍋盤', 'Plate'), X, 226, 16, '#ffd59a');
+    text(L('起鍋盤', 'Plate'), X, 252, 16, '#ffd59a');
     const en = G.plate.length > 0;
-    if (en) btn('dump', X + 190, 210, 78, 28, L('倒掉', 'Dump'), A.dump, { color: '#6b4226', size: 14 });
+    if (en) btn('dump', X + 190, 236, 78, 28, L('倒掉', 'Dump'), A.dump, { color: '#6b4226', size: 14 });
     const well = plateRect();
     ctx.save();
     ctx.beginPath(); rr(well.x, well.y, well.w, well.h, 10); ctx.clip();
@@ -2024,16 +2027,16 @@ function drawRight() {
     });
     ctx.restore();
     ctx.strokeStyle = 'rgba(138,87,51,0.9)'; ctx.lineWidth = 1.5; rr(well.x, well.y, well.w, well.h, 10); ctx.stroke();
-    shaker('salt', X, 410, L('椒鹽 免費', 'Salt free'), '#e9dfc8', '#6b5a44', G.season.salt, en);
-    shaker('spicy', X + 92, 410, L('辣粉 +$5', 'Chili +$5'), '#c8321f', '#7a1a10', G.season.spicy, en);
-    shaker('basil', X + 184, 410, L('九層 +$3', 'Basil +$3'), '#3f8f3a', '#1f4f1c', G.season.basil, en);
+    shaker('salt', X, 420, L('椒鹽 免費', 'Salt free'), '#e9dfc8', '#6b5a44', G.season.salt, en);
+    shaker('spicy', X + 92, 420, L('辣粉 +$5', 'Chili +$5'), '#c8321f', '#7a1a10', G.season.spicy, en);
+    shaker('basil', X + 184, 420, L('九層 +$3', 'Basil +$3'), '#3f8f3a', '#1f4f1c', G.season.basil, en);
     const canBag = c && en && c.atCounter > 0.6;
-    btn('bag', X, 468, 272, 56, L('裝袋', 'Bag'), A.bag, { enabled: !!canBag, clickable: en && !!c, size: canBag ? 24 : 16 });
+    btn('bag', X, 478, 272, 52, L('裝袋', 'Bag'), A.bag, { enabled: !!canBag, clickable: en && !!c, size: canBag ? 24 : 16 });
     if (G.bagHint > 0) G.bagHint -= 1 / 60;
     if (c && c.atCounter > 0.5) {
-      ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 532, 272, 160, 10); ctx.fill();
-      text(L('這單', 'Order'), X + 8, 548, 13, '#ffd59a');
-      if (c.type !== 'regular') { jarIcon('salt', X + 186, 548, 18, true); jarIcon('spicy', X + 212, 548, 18, c.order.spicy); jarIcon('basil', X + 238, 548, 18, c.order.basil); }
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(X, 538, 272, 156, 10); ctx.fill();
+      text(L('這單', 'Order'), X + 8, 554, 13, '#ffd59a');
+      if (c.type !== 'regular') { jarIcon('salt', X + 186, 554, 18, true); jarIcon('spicy', X + 212, 554, 18, c.order.spicy); jarIcon('basil', X + 238, 554, 18, c.order.basil); }
       const need = c.order.items, pk = G.plate.map(q => q.key), ml = mustLeft(c);
       const shown = need.slice(0, 10);
       const step = shown.length > 5 ? 32 : 48;
@@ -2041,7 +2044,7 @@ function drawRight() {
       shown.forEach((k, i) => {
         const j = pk.indexOf(k); if (j >= 0) pk.splice(j, 1);
         const mi = ml.indexOf(k), must = j < 0 && mi >= 0; if (must) ml.splice(mi, 1);
-        const cx2 = X + 22 + (i % 5) * step, cy2 = 590 + Math.floor(i / 5) * 46;
+        const cx2 = X + 22 + (i % 5) * step, cy2 = 598 + Math.floor(i / 5) * 44;
         if (j < 0 && !must) ctx.globalAlpha = 0.45;
         iconBadge(k, 1, cx2, cy2, sz, j >= 0 ? 'done' : must ? 'need' : 'self');
         ctx.globalAlpha = 1;
@@ -2049,7 +2052,7 @@ function drawRight() {
     }
   } else {
     const p = G.pay;
-    const paper = { x: X, y: 244, w: 272, h: 168 };
+    const paper = { x: X, y: 268, w: 272, h: 156 };
     ctx.save();
     ctx.beginPath(); rr(paper.x, paper.y, paper.w, paper.h, 6); ctx.clip();
     ctx.fillStyle = '#fbf6e9'; ctx.fillRect(paper.x, paper.y, paper.w, paper.h);
@@ -2076,11 +2079,11 @@ function drawRight() {
     ctx.strokeStyle = '#c9b89a'; ctx.lineWidth = 1.5; rr(paper.x, paper.y, paper.w, paper.h, 6); ctx.stroke();
     if (p.offer < p.price) {
       const mid = Math.round((p.offer + p.price) / 2 / 5) * 5;
-      btn('payAccept', X, 428, 272, 40, `${L('成交', 'Deal')} $${p.offer}`, A.payAccept, { color: '#2a6f6a', size: 18 });
-      btn('payMid', X, 474, 272, 40, `${L('各讓', 'Split')} $${mid}`, A.payMid, { enabled: !p.midTried, color: '#6b4226', size: 18 });
-      btn('payInsist', X, 520, 272, 40, `${L('全價', 'Full')} $${p.price}`, A.payInsist, { size: 18 });
-      btn('refuse', X, 566, 272, 36, L('不賣', 'No sale'), A.refuse, { color: '#4a4a4a', size: 16 });
-    } else btn('payFull', X, 440, 272, 72, `${L('收錢', 'Take')} $${p.price}${p.tip ? ` +$${p.tip}` : ''}`, A.payFull, { color: '#2a6f6a', size: 24 });
+      btn('payAccept', X, 440, 272, 40, `${L('成交', 'Deal')} $${p.offer}`, A.payAccept, { color: '#2a6f6a', size: 18 });
+      btn('payMid', X, 486, 272, 40, `${L('各讓', 'Split')} $${mid}`, A.payMid, { enabled: !p.midTried, color: '#6b4226', size: 18 });
+      btn('payInsist', X, 532, 272, 40, `${L('全價', 'Full')} $${p.price}`, A.payInsist, { size: 18 });
+      btn('refuse', X, 578, 272, 36, L('不賣', 'No sale'), A.refuse, { color: '#4a4a4a', size: 16 });
+    } else btn('payFull', X, 452, 272, 72, `${L('收錢', 'Take')} $${p.price}${p.tip ? ` +$${p.tip}` : ''}`, A.payFull, { color: '#2a6f6a', size: 24 });
   }
 }
 
@@ -2113,7 +2116,7 @@ function bagBlock() {
 // v44:肉類 2 欄大格(112×60),非肉 3 欄小格(74×68)
 function caseLayout() {
   const meat = MENU.filter(isMeat), veg = MENU.filter(m => !isMeat(m));
-  const top = 246, bot = 648, gap = 8;
+  const top = 272, bot = 640, gap = 8;
   const meatRows = Math.max(1, Math.ceil(meat.length / 2));
   const vegRows = Math.max(1, Math.ceil(veg.length / 2));
   const inner = bot - top - gap;
@@ -2176,38 +2179,43 @@ function drawHint(h, x, cy) {
 }
 
 function drawRail() {
-  const y0 = RAIL.y;
-  ctx.fillStyle = 'rgba(18,10,6,0.96)'; rr(RAIL.x, y0, RAIL.w, RAIL.h, 10); ctx.fill();
-  ctx.strokeStyle = '#6a4a32'; ctx.lineWidth = 2; rr(RAIL.x, y0, RAIL.w, RAIL.h, 10); ctx.stroke();
-  const mg = ctx.createLinearGradient(0, y0 + 2, 0, y0 + 12); mg.addColorStop(0, '#eef2f5'); mg.addColorStop(1, '#6d747c');
-  ctx.fillStyle = mg; rr(RAIL.x + 12, y0 + 5, RAIL.w - 24, 8, 3); ctx.fill();
   const list = (G.counter ? [G.counter] : []).concat(G.queue || []);
   if (!list.length) {
-    text(L('夾單會扣在這條鋼軌上', 'Tickets clip onto this rail'), RAIL.x + RAIL.w / 2, y0 + 70, 16, '#d9cbb8', 'center', 'normal');
+    text(L('客人會站上來，下面是想吃的', 'Guests stand up top. Order underneath.'), 640, 120, 16, '#f3e6d0', 'center', 'normal');
     return;
   }
   const now = performance.now() / 1000;
   list.slice(0, 3).forEach((c, i) => {
     const g = cardGeom(i);
     const born = c.railBorn ?? (c.railBorn = now);
-    const slide = (1 - clamp((now - born) * 3, 0, 1)) * 36;
-    const bob = (c.bounce || 0) > 0 ? -7 * Math.sin(c.bounce * 18) : 0;
-    const x = g.x + slide, y = g.y + bob, w = g.w, h = g.h;
+    const slide = (1 - clamp((now - born) * 4, 0, 1)) * 24;
+    const x = g.x + slide, y = g.y, w = g.w, h = g.h;
+    const foodH = 58, bustH = h - foodH;
     const ratio = clamp(c.patience / c.max, 0, 1), atC = c === G.counter;
     const col = ratio > 0.5 ? '#2f6b3a' : ratio > 0.25 ? '#a86b12' : '#9a2b2b';
-    ctx.fillStyle = '#f7f1e4'; rr(x, y, w, h, 3); ctx.fill();
-    ctx.fillStyle = 'rgba(90,60,30,0.06)';
-    for (let ly = y + 30; ly < y + h - 8; ly += 12) ctx.fillRect(x + 8, ly, w - 16, 1);
-    ctx.strokeStyle = atC ? '#c8962e' : col; ctx.lineWidth = atC ? 3 : 1.5; rr(x, y, w, h, 3); ctx.stroke();
-    ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][i] || '#5c636a'; rr(x + 8, y - 6, 28, 12, 2); ctx.fill();
-    text(String(i + 1), x + 22, y, 11, '#fff8e7', 'center');
-    const foodW = w - 118;
-    text([L('這張', 'Now'), L('下一位', 'Next'), L('再下位', '3rd')][i] || '', x + 12, y + 18, 14, atC ? '#8a5a10' : '#3d6b62');
-    text(`${Math.max(0, Math.ceil(c.patience))}${L('秒', 's')}`, x + foodW - 8, y + 18, 13, col, 'right');
+    ctx.fillStyle = '#fffaf4';
+    rr(x, y, w, h, 4); ctx.fill();
+    ctx.strokeStyle = atC ? '#c8962e' : '#2b1a0e'; ctx.lineWidth = atC ? 3 : 2;
+    rr(x, y, w, h, 4); ctx.stroke();
+    const home = x + w / 2;
+    const far = Math.abs((c.x || home) - home) > 30;
+    if (!far) drawBust(c, x + 2, y + 2, w - 4, bustH - 4);
+    ctx.strokeStyle = '#2b1a0e'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x + 8, y + bustH); ctx.lineTo(x + w - 8, y + bustH); ctx.stroke();
+    ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][i] || '#5c636a';
+    rr(x + 6, y + 6, 20, 16, 3); ctx.fill();
+    text(String(i + 1), x + 16, y + 14, 12, '#fff', 'center');
+    text(`${Math.max(0, Math.ceil(c.patience))}${L('秒', 's')}`, x + w - 8, y + 16, 12, col, 'right');
     const short = shortItems(c);
     const stuck = atC && short.length && !orderHeld(c) && !fillableLeft(c).length;
-    if (c.type === 'regular' && !c.swapped && !c.handed && !short.length) text(L('看左上黃紙', 'See the yellow note'), x + 12, y + 64, 15, '#7a4b00', 'left', 'normal');
-    else {
+    const fy = y + bustH + foodH / 2;
+    if (stuck) {
+      btn('swapOrder', x + 8, y + bustH + 6, 112, 22, L('換單', 'Swap'), A.swapOrder, { enabled: !c.swapped, color: '#2a6f6a', size: 12 });
+      btn('sendAway', x + 126, y + bustH + 6, 114, 22, L('請離開', 'Send off'), A.sendAway, { color: '#4a4a4a', size: 12 });
+      iconRow(short.map(k => [k, 1, 'short']), x + 10, y + h - 14, 20, 2, w - 16);
+    } else if (c.type === 'regular' && !c.swapped && !c.handed && !short.length) {
+      text(L('看黃紙', 'Yellow note'), x + 12, fy, 16, '#7a4b00');
+    } else {
       const ml = c.handed ? countBy(mustLeft(c)) : {};
       const addSrc = c.handed ? (c.need || []) : (c.order.add || []).concat(c.order.items.filter(k => ITEMS[k].vendor && !(c.order.add || []).includes(k)));
       const addC = countBy(addSrc);
@@ -2217,34 +2225,19 @@ function drawRail() {
         if (sp) ents.push([kk, sp, short.includes(kk) ? 'short' : 'self']);
         if (a) ents.push([kk, a, short.includes(kk) ? 'short' : (ml[kk] ? 'need' : (c.handed ? 'done' : 'need'))]);
       });
-      let s2 = 48;
+      let s2 = 40;
       const tot = sz => ents.reduce((t, e) => t + sz + (e[1] > 1 ? sz * 0.3 : 0) + 4, 0);
-      while (s2 > 22 && tot(s2) > foodW - 16) s2 -= 2;
-      iconRow(ents, x + 10, y + (stuck ? 58 : 68), s2, 4, foodW - 16);
+      while (s2 > 22 && tot(s2) > w - 16) s2 -= 2;
+      const used = tot(s2);
+      iconRow(ents, x + Math.max(8, (w - used) / 2), fy, s2, 4, w - 12);
     }
-    if (!stuck && c.type !== 'regular') { jarIcon('spicy', x + 16, y + h - 16, 18, c.order.spicy); jarIcon('basil', x + 40, y + h - 16, 18, c.order.basil); }
-    if (c.type === 'byo') text('BYO', x + 66, y + h - 16, 11, '#7b5ea7');
-    if (stuck) {
-      btn('swapOrder', x + 8, y + h - 36, 108, 28, L('換單', 'Swap'), A.swapOrder, { enabled: !c.swapped, color: '#2a6f6a', size: 14 });
-      btn('sendAway', x + 122, y + h - 36, 108, 28, L('請離開', 'Send off'), A.sendAway, { color: '#4a4a4a', size: 14 });
-    } else if (atC && stockBlocked(c).length) btn('sellShort', x + foodW - 72, y + h - 34, 64, 26, L('照賣', 'Serve'), A.sellShort, { color: '#6b4226', size: 13 });
-    else if (atC && (c.type === 'byo' || c.sus)) btn('report', x + foodW - 72, y + h - 34, 64, 26, L('檢舉', 'Report'), A.report, { color: '#3b5b92', size: 13 });
-    else if (atC && G.pay) {
-      const face = G.pay.sat >= 80 ? L('滿意', 'Happy') : G.pay.sat >= 50 ? L('普通', 'Okay') : L('不爽', 'Unhappy');
-      text(`${face} ${G.pay.sat}`, x + 12, y + h - 16, 13, G.pay.sat >= 80 ? '#2f6b3a' : '#9a2b2b');
-    } else if (atC && lineOf(c)) text(oneLine(L(lineOf(c), c.lineEn || lineOf(c)), foodW - 70, 12), x + 64, y + h - 16, 12, '#6b5344', 'left', 'normal');
-    const home = x + w - 54;
-    const far = Math.abs((c.x || home) - home) > 40;
-    if (far) drawBust(c, (c.x || home) - 46, y + 8, 96, h - 16);
-    else drawBust(c, x + w - 108, y + 8, 100, h - 16);
-    const readyFry = canFryTicket(c);
-    if (readyFry) {
-      ctx.save(); ctx.globalAlpha = 0.35 + 0.25 * Math.sin(now * 5); ctx.strokeStyle = '#e7b84a'; ctx.lineWidth = 2; rr(x + 3, y + 3, w - 6, h - 6, 3); ctx.stroke(); ctx.restore();
-      if (!atC) text(L('可下鍋', 'Fry'), x + foodW - 8, y + h - 16, 12, '#8a5a10', 'right');
-    }
+    if (!stuck && c.type !== 'regular') { jarIcon('spicy', x + w - 36, fy, 16, c.order.spicy); jarIcon('basil', x + w - 16, fy, 16, c.order.basil); }
+    if (atC && !stuck && stockBlocked(c).length) btn('sellShort', x + w - 70, y + bustH + 4, 60, 20, L('照賣', 'Serve'), A.sellShort, { color: '#6b4226', size: 11 });
+    else if (atC && !stuck && (c.type === 'byo' || c.sus)) btn('report', x + w - 70, y + bustH + 4, 60, 20, L('檢舉', 'Report'), A.report, { color: '#3b5b92', size: 11 });
+    if (canFryTicket(c) && !atC) text(L('可下鍋', 'Fry'), x + 8, y + h - 10, 11, '#8a5a10');
+    if (far) drawBust(c, (c.x || home) - (w - 4) / 2, y + 2, w - 4, bustH - 4);
   });
-  if (list.length > 3) text(`+${list.length - 3}`, RAIL.x + RAIL.w - 10, y0 + RAIL.h - 12, 13, '#ffd166', 'right');
-  if (G.phase === 'open' && G.notice === 'cram' && G.t > 20 && G.t < 90) text(L('放學尖峰', 'After-school rush'), RAIL.x + RAIL.w / 2, y0 + RAIL.h - 12, 13, '#ffd166', 'center');
+  if (list.length > 3) text(`+${list.length - 3}`, 176 + 3 * 260, 58, 13, '#ffd166');
 }
 
 function drawBuyMeter(x, y, w) {
