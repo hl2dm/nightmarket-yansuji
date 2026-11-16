@@ -1221,6 +1221,24 @@ function endDay() {
 
 // ---------- 輸入 ----------
 const ACTION_BOARDS = { bag: 'wood', start: 'wood', open: 'wood', nextNight: 'wood', readNews: 'wood', payFull: 'green', payAccept: 'green', payMid: 'green', payInsist: 'green', refuse: 'red', oil: 'red' };
+function boardName(id, opt) {
+  if (opt.bare) return '';
+  if (ACTION_BOARDS[id]) return ACTION_BOARDS[id];
+  if (String(id).startsWith('temp_')) return 'wood';
+  const c = opt.color || '';
+  if (c === '#8a3030' || c === '#4a4a4a') return 'red';
+  if (c === '#2a6f6a' || c === '#2c6b4a') return 'green';
+  return 'wood';
+}
+function blitBoard(im, x, y, w, h) {
+  const sw = im.width, sh = im.height;
+  let sx = 0, sy = 0, sW = sw, sH = sh;
+  const want = w / Math.max(1, h);
+  const have = sw / sh;
+  if (want < have * 0.82) { sW = sh * want; sx = (sw - sW) / 2; }
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(im, sx, sy, sW, sH, x, y, w, h);
+}
 let buttons = [];
 function btn(id, x, y, w, h, label, onClick, opt = {}) {
   const enabled = opt.enabled !== false;
@@ -1246,17 +1264,16 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
     return;
   }
   const base = opt.color || '#c0392b';
+  const board = IMG['btn_' + boardName(id, opt)];
   ctx.save();
-  if (!down) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(x + 2, y + 5, w, h, 10); ctx.fill(); }
-  if (opt.pulse && !down) { const q = 0.4 + 0.6 * Math.sin(performance.now() / 260); ctx.shadowColor = '#ffcf6b'; ctx.shadowBlur = 8 + q * 18; }
-  const board = IMG['btn_' + ACTION_BOARDS[id]];
   if (board) {
     ctx.save();
-    ctx.filter = !enabled ? 'grayscale(0.75) brightness(0.55)' : down ? 'brightness(0.8)' : hover || opt.on ? 'brightness(1.18)' : 'none';
-    ctx.drawImage(board, x, y + dy, w, h);
+    ctx.filter = !enabled ? 'grayscale(0.7) brightness(0.6)' : down ? 'brightness(0.82)' : hover || opt.on ? 'brightness(1.12)' : 'none';
+    blitBoard(board, x, y + dy, w, h);
     ctx.restore();
-    ctx.shadowBlur = 0;
   } else {
+    if (!down) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(x + 2, y + 5, w, h, 10); ctx.fill(); }
+    if (opt.pulse && !down) { const q = 0.4 + 0.6 * Math.sin(performance.now() / 260); ctx.shadowColor = '#ffcf6b'; ctx.shadowBlur = 8 + q * 18; }
     ctx.fillStyle = !enabled ? '#4a4040' : opt.on ? '#f4a261' : hover ? lighten(base) : base;
     rr(x, y + dy, w, h, 10); ctx.fill();
     if (down) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; rr(x, y + dy, w, h, 10); ctx.fill(); }
@@ -1264,9 +1281,12 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
     ctx.strokeStyle = hover || opt.on ? '#ffe8a3' : 'rgba(255,230,180,0.28)'; ctx.lineWidth = hover || opt.on ? 3 : 1.5;
     rr(x, y + dy, w, h, 10); ctx.stroke();
   }
-  ctx.fillStyle = enabled ? '#fff8e7' : '#9a8f86';
+  ctx.shadowBlur = 0;
   ctx.font = `normal ${opt.size || 18}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(tr(label), x + w / 2, y + dy + h / 2 + 1);
+  const labelText = tr(label);
+  if (board) { ctx.lineWidth = 3; ctx.strokeStyle = '#2b1a0e'; ctx.strokeText(labelText, x + w / 2, y + dy + h / 2 + 1); ctx.fillStyle = enabled ? '#fff6e4' : '#c8b8a4'; }
+  else ctx.fillStyle = enabled ? '#fff8e7' : '#9a8f86';
+  ctx.fillText(labelText, x + w / 2, y + dy + h / 2 + 1);
   ctx.restore();
 }
 function lighten(c) { return c === '#c0392b' ? '#e04a3a' : c === '#2a6f6a' ? '#36908a' : c === '#6b4226' ? '#8a5733' : c === '#3b5b92' ? '#4c74b8' : '#888'; }
@@ -2667,12 +2687,16 @@ function drawBoon() {
     const w = 360, h = 420, gap = 24;
     const x = (W - (n * w + (n - 1) * gap)) / 2 + i * (w + gap), y = 120;
     const tone = b.tone === 'good' ? '#2c6b4a' : '#8a5a12';
-    ctx.fillStyle = '#f6ecd4'; rr(x, y, w, h, 16); ctx.fill();
-    if (IMG.boon_card) ctx.drawImage(IMG.boon_card, x, y, w, h);
-    else { ctx.strokeStyle = '#4a2c18'; ctx.lineWidth = 6; rr(x, y, w, h, 16); ctx.stroke(); }
-    ctx.fillStyle = tone; rr(x + 18, y + 18, w - 36, 44, 8); ctx.fill();
-    text(L(b.tone === 'good' ? '順' : '有代價', b.tone === 'good' ? 'Clean' : 'It costs'), x + 36, y + 40, 14, '#fff8e8', 'left', 'normal');
-    text(L(b.zh, b.en), x + w / 2, y + 110, 28, '#3a2416', 'center');
+    if (IMG.boon_card) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(IMG.boon_card, x, y, w, h);
+    } else {
+      ctx.fillStyle = '#f6ecd4'; rr(x, y, w, h, 16); ctx.fill();
+      ctx.strokeStyle = '#4a2c18'; ctx.lineWidth = 6; rr(x, y, w, h, 16); ctx.stroke();
+      ctx.fillStyle = tone; rr(x + 18, y + 18, w - 36, 44, 8); ctx.fill();
+      text(L(b.tone === 'good' ? '順' : '有代價', b.tone === 'good' ? 'Clean' : 'It costs'), x + 36, y + 40, 14, '#fff8e8', 'left', 'normal');
+    }
+    text(L(b.zh, b.en), x + w / 2, y + 118, 26, '#3a2416', 'center');
     text(L('得到', 'You get'), x + 36, y + 170, 14, '#2c6b4a', 'left', 'normal');
     wrap(L(b.up, b.upEn), x + 36, y + 200, w - 72, 18, '#2a3a28', 26);
     text(L('付出', 'You pay'), x + 36, y + 280, 14, '#8a3030', 'left', 'normal');
