@@ -3,6 +3,7 @@
 'use strict';
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
+cv.style.cursor = 'none';
 const W = 1280, H = 720; // 版面座標(邏輯單位);v3.7 實際以 2560×1440(×DPR)繪製
 const RES = 2; // 2K:1 版面單位 = 2 像素
 function fitCanvas() {
@@ -558,6 +559,7 @@ function spawn(type) {
 function addLog(zh, en) { G.log.push({ t: clockStr(), zh, en: en || zh }); }
 function logText(l) { if (!l) return ''; return typeof l === 'string' ? l : `[${l.t}] ${L(l.zh, l.en)}`; }
 function popup(text, x, y, color = '#ffd166') { G.popups.push({ text, x, y, color, life: 1.6 }); }
+function puff(x, y) { for (let i = 0; i < 7; i++) G.particles.push({ x, y, vx: rand(-90, 90), vy: rand(-110, -16), life: 0.32, r: rand(2, 4), c: 'rgba(255,214,120,0.85)' }); }
 function changeRep(d) { G.rep = clamp(G.rep + d, 0, 100); }
 function clockStr() { const m = 18 * 60 + Math.floor(G.t / G.dayLen * 300); return `${Math.floor(m / 60) % 24}:${String(m % 60).padStart(2, '0')}`; }
 function countBy(arr) { const m = {}; arr.forEach(k => m[k] = (m[k] || 0) + 1); return m; }
@@ -1028,6 +1030,8 @@ function update(dt) {
   G.popups.forEach(p => { p.life -= dt; p.y -= 30 * dt; }); G.popups = G.popups.filter(p => p.life > 0);
   G.particles.forEach(p => { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; }); G.particles = G.particles.filter(p => p.life > 0);
   G.shake = Math.max(0, G.shake - dt); if (G.shakeJar) G.shakeJar.t -= dt;
+  if (G._phase !== G.phase) { G._phase = G.phase; G.veil = 1; }
+  G.veil = Math.max(0, (G.veil || 0) - dt * 2.6);
   sfx('tick', dt / SPEED, G.phase === 'open' ? fried().length : 0, G.temp, G.phase === 'open' && G.oilChange <= 0);
   if (G.phase !== 'open') return;
   if (G.forkOpen) return;
@@ -1158,20 +1162,27 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
   const enabled = opt.enabled !== false;
   buttons.push({ id, x, y, w, h, enabled, clickable: enabled || !!opt.clickable, onClick });
   const hover = mouse.x >= x && mouse.x <= x + w && mouse.y >= y && mouse.y <= y + h && enabled;
+  const down = !!(held && held.id === id && hover);
+  const dy = down ? 4 : 0;
   const base = opt.color || '#c0392b';
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.35)'; rr(x + 2, y + 3, w, h, 8); ctx.fill();
+  if (!down) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(x + 2, y + 5, w, h, 10); ctx.fill(); }
+  if (opt.pulse && !down) { const q = 0.4 + 0.6 * Math.sin(performance.now() / 260); ctx.shadowColor = '#ffcf6b'; ctx.shadowBlur = 8 + q * 18; }
   ctx.fillStyle = !enabled ? '#4a4040' : opt.on ? '#f4a261' : hover ? lighten(base) : base;
-  rr(x, y, w, h, 8); ctx.fill();
-  ctx.strokeStyle = opt.on ? '#ffe8a3' : 'rgba(255,230,180,0.35)'; ctx.lineWidth = opt.on ? 3 : 1.5; ctx.stroke();
+  rr(x, y + dy, w, h, 10); ctx.fill();
+  if (down) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; rr(x, y + dy, w, h, 10); ctx.fill(); }
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = hover || opt.on ? '#ffe8a3' : 'rgba(255,230,180,0.28)'; ctx.lineWidth = hover || opt.on ? 3 : 1.5;
+  rr(x, y + dy, w, h, 10); ctx.stroke();
   ctx.fillStyle = enabled ? '#fff8e7' : '#9a8f86';
   ctx.font = `bold ${opt.size || 18}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(tr(label), x + w / 2, y + h / 2 + 1);
+  ctx.fillText(tr(label), x + w / 2, y + dy + h / 2 + 1);
   ctx.restore();
 }
 function lighten(c) { return c === '#c0392b' ? '#e04a3a' : c === '#2a6f6a' ? '#36908a' : c === '#6b4226' ? '#8a5733' : c === '#3b5b92' ? '#4c74b8' : '#888'; }
 const mouse = { x: -1, y: -1 };
 let drag = null;
+let held = null;
 function toCanvas(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; }
 function hitR(p, r, pad = 0) { return !!r && p.x >= r.x - pad && p.x <= r.x + r.w + pad && p.y >= r.y - pad && p.y <= r.y + r.h + pad; }
 function cardGeom(i) {
@@ -1257,18 +1268,20 @@ function releaseDrag() {
   if (!drag) return;
   const d = drag, p = { x: d.x, y: d.y }, moved = d.moved;
   drag = null;
+  const touch = () => puff(p.x, p.y);
   if (d.type === 'item') {
     const over = ticketAt(p);
-    if (!moved) A.drop(d.key);
-    else if (over) A.drop(d.key, over.id);
-  } else if (d.type === 'ticket' && (!moved || overFryer(p))) fryTicket(custById(d.cid));
-  else if (d.type === 'basket' && (!moved || hitR(p, plateRect()) || overFryer(p))) A.lift(d.i);
-  else if (d.type === 'rack' && (!moved || hitR(p, plateRect()))) moveRackToPlate(d.i);
-  else if (d.type === 'plate' && (!moved || hitR(p, guestRect()) || hitR(p, guestCardRect()) || (p.x > 1030 && p.y > 500))) A.bag();
+    if (!moved) { A.drop(d.key); touch(); }
+    else if (over) { A.drop(d.key, over.id); touch(); }
+  } else if (d.type === 'ticket' && (!moved || overFryer(p))) { fryTicket(custById(d.cid)); touch(); }
+  else if (d.type === 'basket' && (!moved || hitR(p, plateRect()) || overFryer(p))) { A.lift(d.i); touch(); }
+  else if (d.type === 'rack' && (!moved || hitR(p, plateRect()))) { moveRackToPlate(d.i); touch(); }
+  else if (d.type === 'plate' && (!moved || hitR(p, guestRect()) || hitR(p, guestCardRect()) || (p.x > 1030 && p.y > 500))) { A.bag(); touch(); G.shake = Math.max(G.shake, 0.12); }
   else if (d.type === 'bill' && G.pay) {
     if (G.pay.offer >= G.pay.price || !moved || hitR(p, guestRect()) || hitR(p, guestCardRect())) A.payAccept();
     else if (hitR(p, cashboxRect())) A.payInsist();
     else A.payMid();
+    touch();
   }
 }
 cv.addEventListener('pointermove', e => {
@@ -1278,14 +1291,17 @@ cv.addEventListener('pointermove', e => {
 cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('pointerdown', e => {
   e.preventDefault(); Object.assign(mouse, toCanvas(e));
+  if ((G.veil || 0) > 0.45) return;
   const p = toCanvas(e);
   if (e.button === 2) return;
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
   for (let i = buttons.length - 1; i >= 0; i--) {
     const b = buttons[i];
     if (!(b.enabled || b.clickable) || !hitR(p, b)) continue;
     if (G.phase === 'open' && /^(item_|lift_|bowl_)/.test(b.id)) continue;
+    held = { id: b.id };
     if (!/^(item_|lift_|vol)/.test(b.id)) sfx('click');
-    b.onClick(); return;
+    return;
   }
   if (G.phase === 'open' && !G.forkOpen) {
     if (!G.rescueUsed) {
@@ -1295,8 +1311,19 @@ cv.addEventListener('pointerdown', e => {
     if (t) drag = { ...t, x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false };
   }
 });
-cv.addEventListener('pointerup', e => { Object.assign(mouse, toCanvas(e)); releaseDrag(); });
-cv.addEventListener('pointercancel', () => { drag = null; });
+cv.addEventListener('pointerup', e => {
+  Object.assign(mouse, toCanvas(e));
+  const p = toCanvas(e);
+  if (held) {
+    const id = held.id;
+    held = null;
+    const b = buttons.find(x => x.id === id);
+    if (b && (b.enabled || b.clickable) && hitR(p, b)) b.onClick();
+    return;
+  }
+  releaseDrag();
+});
+cv.addEventListener('pointercancel', () => { drag = null; held = null; });
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'm') { sfx('cycleVolume'); return; }
@@ -1311,6 +1338,14 @@ window.addEventListener('keydown', e => {
 
 // ---------- 繪圖 ----------
 function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function wood(x, y, w, h) {
+  const g = ctx.createLinearGradient(x, y, x + 40, y + h);
+  g.addColorStop(0, 'rgba(74,42,20,0.96)');
+  g.addColorStop(0.5, 'rgba(42,22,12,0.94)');
+  g.addColorStop(1, 'rgba(24,12,6,0.96)');
+  ctx.fillStyle = g; rr(x, y, w, h, 18); ctx.fill();
+  ctx.strokeStyle = '#d08a48'; ctx.lineWidth = 3; rr(x + 1.5, y + 1.5, w - 3, h - 3, 16); ctx.stroke();
+}
 function text(s, x, y, size = 18, color = '#fff8e7', align = 'left', weight = 'bold') { s = tr(s);
   ctx.font = `${weight} ${size}px ${FONT}`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y);
 }
@@ -2188,25 +2223,13 @@ function drawTitle(time) {
   drawBackground(time, 'stall_front');
   ctx.fillStyle = 'rgba(10,5,3,0.78)'; rr(220, 150, 840, 540, 20); ctx.fill();
   ctx.shadowColor = '#ff5a36'; ctx.shadowBlur = 24; text(L('夜市攤位 · 鹽酥雞攤', 'Night market · fry stall'), 640, 188, 40, '#ffcf6b', 'center'); ctx.shadowBlur = 0;
-  text(L(`本金 $${START_CASH} · 攤位不是你的 · 買斷 $${STALL_PRICE}`, `Start $${START_CASH} · you don't own it · buyout $${STALL_PRICE}`), 640, 230, 18, '#ffd59a', 'center', 'normal');
-  const lines = LANG === 'en' ? [
-    `The landlord wants $${STALL_PRICE}. It does not rise. Pay it and this run ends.`,
-    `Until then, rent comes out every week. Week 1 $${rentFor(1)}, week 6 $${rentFor(6)}, then +$50.`,
-    'Miss a week and it becomes debt. Miss the next one and the stall is taken back.',
-    'Week 1: fill the ticket, fry, lift at gold, salt, take the cash.',
-    'Later: a regular, early fries, haggling, and the health bureau.',
-  ] : [
-    `房東一口價 $${STALL_PRICE}，不跟物價漲。存夠付清，這局就結束。`,
-    `買斷之前，每週收攤扣房租。第 1 週 $${rentFor(1)}，第 6 週 $${rentFor(6)}，之後每週 +$50。`,
-    '付不出就記欠款。再付不出一週，攤位收回。',
-    '第一週先學會：補單、下鍋、金黃就撈、撒鹽、收錢。',
-    '後面才有熟客、預炸、殺價、稽查。',
-  ];
-  lines.forEach((l, i) => text(l, 260, 286 + i * 30, 16, i === lines.length - 1 ? '#ffd166' : '#f3e6d0', 'left', 'normal'));
+  text(L(`本金 $${START_CASH}　買斷 $${STALL_PRICE}`, `Start $${START_CASH}    Buyout $${STALL_PRICE}`), 640, 248, 20, '#ffd59a', 'center', 'normal');
+  text(L('攤位不是你的。每週收攤扣房租，連續兩週付不出就收回。', "The stall isn't yours. Rent comes out every week. Miss two and it's gone."), 640, 300, 18, '#f3e6d0', 'center', 'normal');
+  text(L('第一週：把單補滿，下鍋，金黃就撈，撒鹽，收錢。', 'Week one: fill the ticket, fry, lift at gold, salt, take the cash.'), 640, 338, 18, '#ffd166', 'center', 'normal');
   const sv = loadSave(true);
   if (sv) { btn('continue', 400, 530, 230, 56, L(`繼續第 ${sv.night} 週`, `Continue week ${sv.night}`), A.cont, { size: 22 }); btn('newRun', 650, 530, 230, 56, L('重新開始', 'New game'), A.newRun, { size: 20, color: '#6b4226' });
     text(L(`存檔：現金 $${Math.round(sv.cash)}${sv.debt ? ` · 欠 $${sv.debt}` : ''} · 升級 ${sv.upgrades.length} 項`, `Save: $${Math.round(sv.cash)} cash${sv.debt ? ` · owe $${sv.debt}` : ''} · ${sv.upgrades.length} upgrades`), 640, 612, 15, '#bbb', 'center', 'normal'); }
-  else btn('start', 540, 540, 200, 60, L('開始進貨', 'Buy stock'), A.start, { size: 24 });
+  else btn('start', 470, 420, 340, 76, L('開始進貨', 'Buy stock'), A.start, { size: 30, pulse: true });
 }
 
 function drawNewsCard(time) {
@@ -2244,7 +2267,7 @@ function drawNewsCard(time) {
 function drawStock(time) {
   if (!G.newsRead) { drawNewsCard(time); return; }
   drawBackground(time, 'bg_mid');
-  ctx.fillStyle = 'rgba(10,5,3,0.9)'; rr(30, 20, 1220, 680, 18); ctx.fill();
+  wood(30, 20, 1220, 680);
   text(L(`第 ${G.night} 週 · 開攤前進貨`, `Week ${G.night} · stock up`), 60, 48, 28, '#ffcf6b');
   drawBuyMeter(720, 34, 220);
   text(L(`$${Math.round(G.cash)} / $${STALL_PRICE}`, `$${Math.round(G.cash)} / $${STALL_PRICE}`), 960, 42, 14, '#ffd59a', 'left', 'normal');
@@ -2301,7 +2324,7 @@ function drawStock(time) {
 
 function drawShop(time) {
   drawBackground(time, 'shop_upgrade');
-  ctx.fillStyle = 'rgba(10,5,3,0.9)'; rr(30, 20, 1220, 680, 18); ctx.fill();
+  wood(30, 20, 1220, 680);
   text(L('阿伯的二手設備店', "Uncle's used-gear shop"), 60, 52, 28, '#ffcf6b');
   text(L(`每晚最多 ${MAX_UPGRADES_PER_NIGHT} 項 · 今晚已買 ${G.boughtTonight}`, `Max ${MAX_UPGRADES_PER_NIGHT} a night · bought ${G.boughtTonight}`), 1220, 52, 15, '#ffd59a', 'right');
   infoBar(96);
@@ -2324,7 +2347,7 @@ function drawShop(time) {
 
 function drawResults(time) {
   drawBackground(time, 'night_summary');
-  ctx.fillStyle = 'rgba(10,5,3,0.88)'; rr(120, 40, 1040, 650, 20); ctx.fill();
+  wood(120, 40, 1040, 650);
   const s = G.stats;
   text(L(`第 ${G.night} 週 收攤`, `Week ${G.night} close`), 640, 80, 34, '#ffcf6b', 'center');
   drawBuyMeter(430, 98, 420);
@@ -2478,7 +2501,12 @@ function drawFx() {
         rr(g.x - 3, g.y - 3, g.w + 6, g.h + 6, 4); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
       }
     }
-    ctx.save(); ctx.globalAlpha = 0.9;
+    ctx.save();
+    const tilt = clamp(((drag.x - (drag.lx == null ? drag.x : drag.lx)) * 0.035), -0.35, 0.35);
+    drag.lx = drag.x;
+    ctx.translate(drag.x, drag.y); ctx.rotate(tilt); ctx.translate(-drag.x, -drag.y);
+    ctx.globalAlpha = 0.94;
+    ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(drag.x + 10, drag.y + 16, 22, 8, 0, 0, 7); ctx.fill();
     if (drag.type === 'item') {
       foodIcon(drag.key, drag.x, drag.y, 68, false);
       if (pv) {
@@ -2519,6 +2547,20 @@ function drawFx() {
     }
   }
 }
+function drawCursor() {
+  if (mouse.x < 0 || mouse.y < 0) return;
+  if (drag) return;
+  const hot = buttons.some(b => b.enabled && hitR(mouse, b)) || (G.phase === 'open' && !!findDrag(mouse));
+  ctx.save();
+  ctx.translate(mouse.x, mouse.y);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.arc(2, 3, hot ? 9 : 7, 0, 7); ctx.fill();
+  ctx.fillStyle = hot ? '#fff4d2' : '#ffd166';
+  ctx.beginPath(); ctx.arc(0, 0, hot ? 8 : 6, 0, 7); ctx.fill();
+  ctx.strokeStyle = hot ? '#c0392b' : '#6b3a12'; ctx.lineWidth = 2; ctx.stroke();
+  if (!hot) { ctx.strokeStyle = '#fff8e7'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(-4, 0); ctx.moveTo(4, 0); ctx.lineTo(11, 0); ctx.moveTo(0, -11); ctx.lineTo(0, -4); ctx.moveTo(0, 4); ctx.lineTo(0, 11); ctx.stroke(); }
+  ctx.restore();
+}
+
 function drawVol() {
   const S = window.SFX, lv = S ? S.level : 0, lab = !S || S.headless ? L('靜音', 'Mute') : L(['靜音', '小', '中', '大'][lv], ['Mute', 'Low', 'Mid', 'High'][lv]);
   btn('vol', 1200, 6, 74, 32, lab, () => sfx('cycleVolume'), { color: '#3b5b92', size: 13, on: false });
@@ -2549,7 +2591,9 @@ function render(time) {
   // 暈影
   const vg = ctx.createRadialGradient(640, 360, 300, 640, 360, 800); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.45)');
   ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  if (G.veil > 0.02) { ctx.fillStyle = `rgba(6,3,1,${G.veil})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
+  drawCursor();
 }
 
 // ---------- 主迴圈 ----------
