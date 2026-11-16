@@ -467,48 +467,40 @@ function priceTrend() {
 function batchCost(k) { return Math.round(unitCost(k) * STOCK[k].batch); }
 function rescueCost(k) { return Math.round(unitCost(k, true) * STOCK[k].batch * 1.6); }
 
-function buildSchedule() {
-  // 特殊客人固定出場時間,其餘隨機
-  const fixed = [[6, 'normal'], ...NIGHT_SPECIALS[Math.min(G.night, NIGHT_SPECIALS.length) - 1]];
-  const busy = (1 + 0.1 * (G.night - 1)) * (has('neon') ? 1.12 : 1);
-  const s = fixed.map(([t, type]) => ({ t, type }));
-  let t = 10;
-  while (t < G.dayLen - 4) {
-    const base = t < 60 ? rand(9, 14) : t < 130 ? (G.rumorId === 2 ? rand(5, 8) : rand(6, 10)) : rand(11, 16);
-    const rush = (THEMES[G.theme] || {}).rush || 1;
-    t += base / busy / rush * (1 - Math.min(0.3, Math.max(0, (G.rep - 50) / 10 * 0.03)));
-    if (s.some(x => Math.abs(x.t - t) < 4)) continue;
-    let kind = rng() < (G.notice === 'cram' ? 0.62 : 0.28) ? 'student' : 'normal';
-    if (G.night >= 3 && G.notice !== 'cram' && rng() < 0.1) kind = 'live';
-    s.push({ t, type: kind });
-  }
-  if (G.notice === 'lantern') { s.push({ t: 74, type: 'normal' }); s.push({ t: 112, type: 'normal' }); }
-  if (G.notice === 'feast') {
-    s.filter(e => e.type === 'normal' || e.type === 'student').slice(0, 2).forEach(e => {
-      const i = s.indexOf(e); if (i >= 0 && s.length > 4) s.splice(i, 1);
-    });
-  }
-  if (G.notice === 'raid' && !s.some(e => e.type === 'inspector')) {
-    const mid = s.find(e => e.type === 'normal' && e.t > 40);
-    if (mid) mid.type = 'inspector'; else s.push({ t: 88, type: 'inspector' });
-  }
+function guestQuota() {
+  // 人數跟口碑走。口碑 0 約 6 位，100 約 14 位。第一週固定 5 位，用來學。
+  if (G.night === 1) return 5;
+  let n = 6 + Math.round(clamp(G.rep, 0, 100) / 100 * 8);
+  if (has('neon')) n += 2;
+  if (hasBoon('loud')) n += 1;
+  if (hasBoon('night')) n += 2;
   const nt = noticeNow();
-  if (nt.extra) for (let i = 0; i < nt.extra; i++) s.push({ t: 38 + i * 28, type: 'normal' });
-  if (nt.cut) {
-    let n = nt.cut;
-    for (let i = s.length - 1; i >= 0 && n > 0; i--) {
-      if (s[i].type === 'normal' || s[i].type === 'student') { s.splice(i, 1); n--; }
-    }
+  if (nt.extra) n += nt.extra;
+  if (nt.cut) n -= nt.cut;
+  if (G.notice === 'feast') n -= 2;
+  if (G.notice === 'cram') n += 3;
+  return clamp(n, 4, 18);
+}
+function buildSchedule() {
+  // 固定人數，排進收攤前 30 秒。人少就早收，不把空檔拖到倒數結束。
+  const latest = Math.max(40, G.dayLen - 30);
+  const quota = guestQuota();
+  const spec = [];
+  if (G.night > 1) (NIGHT_SPECIALS[Math.min(G.night, NIGHT_SPECIALS.length) - 1] || []).forEach(([, type]) => spec.push(type));
+  else spec.push('student');
+  if (G.notice === 'raid' && !spec.includes('inspector')) spec.push('inspector');
+  if (hasBoon('charm') && G.night > 1) spec.push('regular');
+  const types = spec.slice(0, quota);
+  while (types.length < quota) {
+    let kind = 'normal';
+    if (G.notice === 'cram' ? rng() < 0.7 : rng() < 0.22) kind = 'student';
+    else if (G.night >= 3 && rng() < 0.08) kind = 'live';
+    types.push(kind);
   }
-  if (hasBoon('loud')) s.push({ t: 58, type: 'normal' });
-  if (hasBoon('charm') && G.night > 1) s.push({ t: 96, type: 'regular' });
-  s.sort((a, b) => a.t - b.t);
-  if (G.night === 1) {
-    const stu = s.find(e => e.type === 'student');
-    G.schedule = s.filter(e => e.type === 'normal').slice(0, 4);
-    if (stu) G.schedule.push(stu);
-    G.schedule.sort((a, b) => a.t - b.t);
-  } else G.schedule = s;
+  const n = types.length;
+  const gap = n <= 1 ? 0 : Math.min(14, (latest - 6) / (n - 1));
+  G.schedule = types.map((type, i) => ({ t: Math.round((6 + gap * i) * 10) / 10, type }));
+  G.guestQuota = n;
 }
 
 function makeOrder(type) {
@@ -1040,10 +1032,6 @@ function update(dt) {
   if (G.phase !== 'open') return;
   if (G.forkOpen) return;
   G.t += dt;
-  if (G.night >= 2 && G.t > 52 && G.t < 84 && G.t < G.dayLen) {
-    G.beatCd = (G.beatCd || 0) - dt;
-    if (G.beatCd <= 0 && G.queue.length < 3) { G.beatCd = rand(8, 13); spawn(rng() < 0.65 ? 'student' : 'normal'); }
-  }
   if (G.cat) {
     if (G.cat.nap > 0) G.cat.nap -= dt;
     else {
@@ -1056,7 +1044,7 @@ function update(dt) {
   else if (G.theme === 'ghost' && rng() < dt * 5) G.particles.push({ x: rand(40, W - 40), y: rand(50, 120), vx: rand(-10, 10), vy: rand(-18, -4), life: rand(1.2, 2.2), r: rand(2, 4.5), c: 'rgba(150,230,180,0.4)' });
   else if (G.theme === 'temple' && rng() < dt * 6) G.particles.push({ x: rand(60, W - 60), y: rand(48, 110), vx: rand(-8, 8), vy: rand(-14, -3), life: rand(0.8, 1.5), r: rand(1.6, 3), c: 'rgba(255,196,90,0.6)' });
   if (G.oilUse > OIL_LIMIT && rng() < dt * 5) G.particles.push({ x: rand(420, 900), y: 320, vx: rand(-8, 8), vy: rand(-28, -8), life: 1.5, r: rand(7, 14), c: 'rgba(70,55,40,0.28)' });
-  while (G.schedule.length && G.schedule[0].t <= G.t && G.t < G.dayLen) { const e = G.schedule.shift(); if ((e.type === 'normal' || e.type === 'student') && G.rep < 50 && rng() < (50 - G.rep) / 60) continue; spawn(e.type); }
+  while (G.schedule.length && G.schedule[0].t <= G.t && G.t < G.dayLen) { const e = G.schedule.shift(); spawn(e.type); }
   if (!G.forkFired && G.forkId && G.t >= 46 && G.t < G.dayLen - 15 && !G.pay) { G.forkFired = true; G.forkOpen = true; }
   nightBeats();
   // 油溫
@@ -1116,6 +1104,12 @@ function update(dt) {
   if (G.mustFlash > 0) G.mustFlash -= dt / SPEED;
   if (G.lastLine) { G.lastLine.t -= dt; if (G.lastLine.t <= 0) G.lastLine = null; }
   G.walkers.forEach(w => { w.x += w.dir * 220 * dt; if (w.sayT) w.sayT -= dt; }); G.walkers = G.walkers.filter(w => w.x > 180 && w.x < 1400);
+  // 名單走完、攤上沒人，就收。不要空等倒數。
+  if (!G.counter && !G.queue.length && !(G.schedule && G.schedule.length) && G.t > 4) {
+    if (!G.endBanner) { G.endBanner = true; addLog('沒客人了，收攤', 'No one else coming. Closing.'); }
+    endDay();
+    return;
+  }
   // 收攤
   if (G.t >= G.dayLen) {
     if (!G.endBanner) { G.endBanner = true; addLog('收攤時間到,不再接新客', 'Closing time — no new guests'); }
@@ -1433,7 +1427,8 @@ function drawHUD() {
   const left = Math.max(0, G.dayLen - G.t);
   text(L(`第 ${G.night} 週`, `Week ${G.night}`), 14, 20, 18, '#ffcf6b');
   text(clockStr(), 118, 20, 18);
-  text(G.t < G.dayLen ? L(`還有 ${Math.ceil(left)} 秒`, `${Math.ceil(left)}s left`) : L('收攤中', 'Closing'), 196, 20, 14, '#e7d7c3', 'left', 'normal');
+  const coming = (G.schedule ? G.schedule.length : 0) + (G.queue ? G.queue.length : 0) + (G.counter ? 1 : 0);
+  text(G.t < G.dayLen ? L(`${Math.ceil(left)}秒 · ${coming}位`, `${Math.ceil(left)}s · ${coming}`) : L('收攤中', 'Closing'), 196, 20, 14, '#e7d7c3', 'left', 'normal');
   if (IMG.uiCash) ctx.drawImage(IMG.uiCash, 360, 8, 36, 22);
   text(`$${Math.round(G.cash)}`, 402, 20, 20, G.cash >= G.rent ? '#ffd166' : '#ff8787');
   const rentStr = L(`本週 $${G.rent}`, `Week $${G.rent}`) + (G.debt ? `  ${L('欠', 'owe')} $${Math.round(G.debt * 1.2)}` : '');
@@ -2171,7 +2166,7 @@ function drawRail() {
     }
   });
   if (list.length > 3) text(`+${list.length - 3}`, RAIL.x + RAIL.w - 10, y0 + RAIL.h - 12, 13, '#ffd166', 'right');
-  if (G.phase === 'open' && G.night >= 2 && G.t > 52 && G.t < 84) text(L('放學尖峰', 'After-school rush'), RAIL.x + RAIL.w / 2, y0 + RAIL.h - 12, 13, '#ffd166', 'center');
+  if (G.phase === 'open' && G.notice === 'cram' && G.t > 20 && G.t < 90) text(L('放學尖峰', 'After-school rush'), RAIL.x + RAIL.w / 2, y0 + RAIL.h - 12, 13, '#ffd166', 'center');
 }
 
 function drawBuyMeter(x, y, w) {
@@ -2298,7 +2293,7 @@ function drawStock(time) {
   });
   const est = G.schedule.length;
   const tot = MENU.reduce((a, k) => a + G.inv[k].fresh + G.inv[k].old, 0);
-  text(L(`預估今晚約 ${est} 位客人。目前備料 ${tot} 份。金框是今早批發，七五折。`, `About ${est} guests tonight. ${tot} portions ready. Gold frame is this morning’s wholesale, 25% off.`), 60, 578, 16, '#f3e6d0', 'left', 'normal');
+  text(L(`今晚 ${est} 位（口碑 ${Math.round(G.rep)}，越高人越多）。備料 ${tot} 份。沒人了就收攤。`, `Tonight ${est} guests (rep ${Math.round(G.rep)}: higher brings more). ${tot} portions. An empty stall closes.`), 60, 578, 16, '#f3e6d0', 'left', 'normal');
   text(oneLine(priceTrend(), 1160, 14), 60, 552, 14, '#ffd59a', 'left', 'normal');
   text(L('營業中某種料賣完，可點紅字「補」叫表弟送一次，比批發貴。', 'If something sells out mid-shift, tap the red + once. Cousin charges more than wholesale.'), 60, 606, 14, '#bba', 'left', 'normal');
   btn('open', 980, 632, 240, 56, L('開攤', 'Open'), A.open, { size: 24 });
