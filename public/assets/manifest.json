@@ -1,0 +1,165 @@
+{
+  "style": "Unified muted pixel art; 2× nearest-neighbour exports",
+  "assets": [
+    {
+      "file": "cust_normal.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_normal_b.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_normal_c.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_student.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_student_b.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_regular.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_aunt.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_drunk.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_inspector.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_inspector_revealed.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_byo.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "cust_live.png",
+      "width": 480,
+      "height": 784,
+      "logicalWidth": 240,
+      "logicalHeight": 392,
+      "transparent": true
+    },
+    {
+      "file": "bg_counter.png",
+      "width": 2560,
+      "height": 488,
+      "logicalWidth": 1280,
+      "logicalHeight": 244,
+      "transparent": false
+    },
+    {
+      "file": "fryer_body.png",
+      "width": 1272,
+      "height": 436,
+      "logicalWidth": 636,
+      "logicalHeight": 218,
+      "transparent": false
+    },
+    {
+      "file": "plate_well.png",
+      "width": 544,
+      "height": 224,
+      "logicalWidth": 272,
+      "logicalHeight": 112,
+      "transparent": true
+    },
+    {
+      "file": "rack_board.png",
+      "width": 1208,
+      "height": 176,
+      "logicalWidth": 604,
+      "logicalHeight": 88,
+      "transparent": false
+    },
+    {
+      "file": "slip.png",
+      "width": 496,
+      "height": 60,
+      "logicalWidth": 248,
+      "logicalHeight": 30,
+      "transparent": true
+    },
+    {
+      "file": "note_regular.png",
+      "width": 308,
+      "height": 144,
+      "logicalWidth": 154,
+      "logicalHeight": 72,
+      "transparent": true
+    },
+    {
+      "file": "basket_big.png",
+      "width": 284,
+      "height": 312,
+      "logicalWidth": 142,
+      "logicalHeight": 156,
+      "transparent": true
+    },
+    {
+      "file": "basket_small.png",
+      "width": 284,
+      "height": 148,
+      "logicalWidth": 142,
+      "logicalHeight": 74,
+      "transparent": true
+    }
+  ]
+}

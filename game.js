@@ -32,33 +32,8 @@ function assetPath(src) {
   const base = (typeof window !== 'undefined' && window.__ASSET_BASE) || '/';
   return base + rel;
 }
-function loadImg(k, src, trim) { const im = new Image(); im.onload = () => { IMG[k] = k.startsWith('c_') ? prepPortrait(im) : trim ? prepFood(im) : im; }; im.src = assetPath(src); }
-// All customer portraits share a 128px grid and baseline. Preserve supplied alpha;
-// never chroma-key clothing, hair or skin as if they were a background.
-function prepPortrait(im) {
-  const source = document.createElement('canvas'); source.width = im.width; source.height = im.height;
-  const g = source.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0);
-  let data; try { data = g.getImageData(0, 0, im.width, im.height); } catch (e) { return im; }
-  const pixels = data.data;
-  let left = im.width, top = im.height, right = -1, bottom = -1;
-  for (let y = 0; y < im.height; y++) for (let x = 0; x < im.width; x++) {
-    const alpha = (y * im.width + x) * 4 + 3;
-    if (pixels[alpha] < 128) { pixels[alpha] = 0; continue; }
-    pixels[alpha] = 255;
-    left = Math.min(left, x); right = Math.max(right, x);
-    top = Math.min(top, y); bottom = Math.max(bottom, y);
-  }
-  if (right < left || bottom < top) return im;
-  g.putImageData(data, 0, 0);
-  let sw = right - left + 1, sh = bottom - top + 1;
-  if (sh > sw * 1.35) sh = Math.round((bottom - top + 1) * 0.5);
-  const portrait = document.createElement('canvas'); portrait.width = portrait.height = 128;
-  const p = portrait.getContext('2d'); p.imageSmoothingEnabled = false;
-  const scale = Math.min(120 / sw, 124 / sh);
-  const dw = Math.round(sw * scale), dh = Math.round(sh * scale);
-  p.drawImage(source, left, top, sw, sh, Math.round((128 - dw) / 2), 128 - dh, dw, dh);
-  return portrait;
-}
+function loadImg(k, src, trim) { const im = new Image(); im.onload = () => { IMG[k] = trim ? prepFood(im) : im; }; im.src = assetPath(src); }
+// Production portraits retain their native 480×784 head-to-waist canvas and alpha.
 function prepFood(im) {
   const w = im.width, h = im.height; if (!w || !h) return im;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -80,7 +55,9 @@ function prepFood(im) {
   return c2;
 }
 loadImg('bg', 'art/bg_stall.jpg');
-['normal','normal_b','normal_c','student','student_b','regular','aunt','drunk','inspector','byo','inspector_revealed','live'].forEach(k => loadImg('c_' + k, `art/cust_${k}.png?v=bust2`));
+const LAYOUT_ART = { counterBg: 'bg_counter', fryerBody: 'fryer_body', plateWell: 'plate_well', rackBoard: 'rack_board', orderSlip: 'slip', regularNote: 'note_regular' };
+Object.entries(LAYOUT_ART).forEach(([key, file]) => loadImg(key, `public/assets/${file}.png?v=layout1`));
+['normal','normal_b','normal_c','student','student_b','regular','aunt','drunk','inspector','byo','inspector_revealed','live'].forEach(k => loadImg('c_' + k, `public/assets/cust_${k}.png?v=waist1`));
 ['chicken','tempura','riceblood','bean','mushroom','squid'].forEach(k => loadImg('f_' + k, `art/food_${k}.png`));
 loadImg('tankTop', 'art/fryer_top.jpg'); loadImg('basketTop', 'art/basket_top.png');
 // v3.2:Grok 像素素材(assets/,由 _tools/cutout.py 去綠幕產生);沒載到就退回上面的舊圖
@@ -109,7 +86,7 @@ function keyCartilage(im, raw) {
   return c2;
 }
 { const im = new Image(); im.onload = () => { IMG.fr_cartilage = keyCartilage(im, false); IMG.raw_cartilage = keyCartilage(im, true); }; im.src = assetPath('assets/food_cartilage_fried.png'); }
-loadImg('burnt', 'assets/food_burnt.png'); loadImg('bigNet', 'assets/basket_big.png'); loadImg('smallNet', 'assets/basket_small.png');
+loadImg('burnt', 'assets/food_burnt.png'); loadImg('bigNet', 'public/assets/basket_big.png?v=layout1'); loadImg('smallNet', 'public/assets/basket_small.png?v=layout1');
 loadImg('tank2', 'assets/fryer_tank.png'); loadImg('uiCash', 'assets/ui_cash.png'); loadImg('uiRep', 'assets/ui_rep.png');
 loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bowl_chili.png'); loadImg('bowl_basil', 'assets/food_basil_fried.png'); loadImg('scissorsP', 'assets/scissors.png'); loadImg('bagP', 'assets/food_bag.png'); loadImg('cashTray', 'assets/cash_tray.png');
 ['stall_front','bg_mid','shop_upgrade','night_summary','bg_rain','bg_temple','bg_ghost','bg_blackout','bg_far'].forEach(k => loadImg('sc_' + k, `assets/scene_${k}.jpg`));
@@ -1642,12 +1619,16 @@ function customerRowCanvas(theme) {
   return c;
 }
 function drawCustomerRow(time, theme) {
-  ctx.drawImage(customerRowCanvas(theme), 0, 0);
+  if (IMG.counterBg) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    if (theme === 'blackout' && !has('generator')) ctx.filter = 'brightness(0.35)';
+    ctx.drawImage(IMG.counterBg, 0, 42, 1280, 244); ctx.restore();
+  } else ctx.drawImage(customerRowCanvas(theme), 0, 0);
   const P = STRIP_PAL[theme] || STRIP_PAL.fair, [lr, lg, lb] = P.lamp;
   const dark = theme === 'blackout' && !has('generator');
   const n = dark ? 5 : (theme === 'temple' ? 10 : 15);
   ctx.save();
-  for (let i = 0; i < n; i++) {
+  if (!IMG.counterBg) for (let i = 0; i < n; i++) {
     const x = 220 + i * ((W - 240) / n), y = 64 + Math.sin(i * 0.9) * 2;
     const fl = dark ? 0.2 + 0.25 * Math.sin(time * 7 + i * 2) : 0.72 + 0.28 * Math.sin(time * 2.4 + i);
     const rad = theme === 'temple' ? 16 : 11;
@@ -1684,8 +1665,11 @@ function drawScene(time) {
 }
 function drawNotebook(x, y) {
   ctx.save();
+  if (IMG.regularNote) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.regularNote, x, y, 154, 72); }
+  else {
   ctx.fillStyle = '#fff3a8'; rr(x, y, 154, 72, 6); ctx.fill();
   ctx.strokeStyle = '#e1c56a'; ctx.lineWidth = 1; rr(x, y, 154, 72, 6); ctx.stroke();
+  }
   text(L('熟客', 'Regular'), x + 8, y + 14, 12, '#7a4b00');
   jarIcon('spicy', x + 108, y + 14, 14, G.regularOrder.spicy);
   jarIcon('basil', x + 132, y + 14, 14, G.regularOrder.basil);
@@ -1902,10 +1886,16 @@ function drawTank() {
   const old = G.oilUse > OIL_LIMIT, now = performance.now() / 1000;
   const F = fryFrame();
   const X = F.x, Y = F.y, TW = F.w, TH = F.h;
+  if (IMG.fryerBody) {
+    ctx.save(); ctx.imageSmoothingEnabled = false;
+    if (old) ctx.filter = 'brightness(0.65) sepia(0.4)';
+    ctx.drawImage(IMG.fryerBody, X, Y, TW, TH); ctx.restore();
+  } else {
   ctx.fillStyle = '#5c6168'; rr(X, Y, TW, TH, 12); ctx.fill();
   ctx.fillStyle = '#8d949c'; rr(X + 4, Y + 4, TW - 8, 8, 3); ctx.fill();
   ctx.fillStyle = old ? '#6a440e' : '#c98a28'; rr(X + 8, Y + F.head - 4, TW - 16, F.oil + 8, 8); ctx.fill();
   ctx.fillStyle = old ? 'rgba(40,20,0,0.35)' : 'rgba(255,220,120,0.18)'; rr(X + 14, Y + F.head, TW - 28, F.oil - 4, 6); ctx.fill();
+  }
   if (G.fullFlash > 0) { ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; rr(X + 2, Y + 2, TW - 4, TH - 4, 14); ctx.stroke(); }
   const frac = clamp(G.oilUse / OIL_LIMIT, 0, 1);
   const bx = X + 16, by = Y + 8, bw = TW - 32;
@@ -1930,10 +1920,11 @@ function drawTank() {
   ctx.save();
   const rackY = F.y + F.h + 8;
   ctx.fillStyle = 'rgba(30,16,4,0.45)'; rr(F.x, rackY, F.w, 100, 10); ctx.fill();
-  const netI = IMG.basketTop || IMG.smallNet;
+  if (IMG.rackBoard) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.rackBoard, 344, 534, 604, 88); }
+  const netI = IMG.smallNet || IMG.basketTop;
   for (let i = 0; i < 4; i++) {
     const box = rackRect(i);
-    if (netI) { ctx.save(); ctx.globalAlpha = G.rack[i] ? 1 : 0.92; blitCover(netI, box.x + 4, box.y + 4, box.w - 8, box.h - 8); ctx.restore(); }
+    if (netI) { ctx.save(); ctx.globalAlpha = G.rack[i] ? 1 : 0.92; ctx.imageSmoothingEnabled = false; ctx.drawImage(netI, box.x, box.y, box.w, box.h); ctx.restore(); }
     else { ctx.strokeStyle = 'rgba(220,220,220,0.8)'; ctx.lineWidth = 1.5; for (let g = 0; g < 6; g++) { ctx.beginPath(); ctx.moveTo(box.x + 8, box.y + 16 + g * 14); ctx.lineTo(box.x + box.w - 8, box.y + 16 + g * 14); ctx.stroke(); } }
   }
   (G.rack || []).forEach((r, i) => {
@@ -1965,7 +1956,7 @@ function drawSlot(i, net, now, cid) {
   const finish = () => { if (draining) ctx.restore(); };
   ctx.fillStyle = on ? 'rgba(20,10,4,0.28)' : 'rgba(20,10,4,0.12)'; rr(x, y, w, h, 10); ctx.fill();
   const netI = (big ? IMG.bigNet : IMG.smallNet) || IMG.basketTop;
-  if (netI) { ctx.save(); ctx.globalAlpha = on ? 0.92 : 0.8; blitCover(netI, x, y, w, h); ctx.restore(); }
+  if (netI) { ctx.save(); ctx.globalAlpha = on ? 0.92 : 0.8; ctx.imageSmoothingEnabled = false; ctx.drawImage(netI, x, y, w, h); ctx.restore(); }
   if (!on) {
     const lab = b.kind === 'chicken' ? L('雞排', 'Cutlet') : (big ? L('肉', 'Meat') : L('菜', 'Veg'));
     text(lab, x + w / 2, y + h * 0.78, big ? 15 : 12, 'rgba(255,236,210,0.45)', 'center');
@@ -2033,6 +2024,8 @@ function drawRight() {
     if (en) btn('dump', X + 190, 292, 78, 28, L('倒掉', 'Dump'), A.dump, { color: '#6b4226', size: 14 });
     const well = plateRect();
     ctx.save();
+    if (IMG.plateWell) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.plateWell, well.x, well.y, well.w, well.h); }
+    else {
     ctx.fillStyle = '#6e757c'; rr(well.x - 4, well.y - 4, well.w + 8, well.h + 8, 16); ctx.fill();
     ctx.fillStyle = '#c5ccd2'; rr(well.x, well.y, well.w, well.h, 14); ctx.fill();
     const steel = ctx.createLinearGradient(well.x, well.y, well.x, well.y + well.h);
@@ -2040,6 +2033,7 @@ function drawRight() {
     ctx.fillStyle = steel; ctx.beginPath(); ctx.ellipse(well.x + well.w / 2, well.y + well.h / 2, well.w * 0.42, well.h * 0.38, 0, 0, 7); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(well.x + well.w / 2, well.y + well.h / 2 - 4, well.w * 0.28, well.h * 0.16, 0, 0, 7); ctx.stroke();
+    }
     if (has('heatlamp')) {
       const lg = ctx.createRadialGradient(X + 115, well.y + 54, 6, X + 115, well.y + 60, 110);
       lg.addColorStop(0, 'rgba(255,186,70,0.28)'); lg.addColorStop(1, 'rgba(255,186,70,0)');
@@ -2229,7 +2223,8 @@ function drawRail() {
     const col = ratio > 0.5 ? '#2f6b3a' : ratio > 0.25 ? '#a86b12' : '#9a2b2b';
     const home = g.x + g.w / 2;
     ctx.fillStyle = '#fffaf4';
-    rr(x, y + h - foodH, w, foodH, 4); ctx.fill();
+    if (IMG.orderSlip) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.orderSlip, x, y + h - foodH, w, foodH); ctx.restore(); }
+    else { rr(x, y + h - foodH, w, foodH, 4); ctx.fill(); }
     ctx.strokeStyle = atC ? '#c8962e' : '#2b1a0e'; ctx.lineWidth = atC ? 3 : 1.5;
     rr(x, y + h - foodH, w, foodH, 4); ctx.stroke();
     const px = (c.hold > 0 ? -160 : (c.x == null ? -160 : c.x));
