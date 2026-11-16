@@ -1258,7 +1258,7 @@ function dropPreview(k, p) {
 }
 function ticketRect() { return cardGeom(0); }
 function plateRect() { return { x: 988, y: 274, w: 272, h: 136 }; }
-function guestRect() { const g = cardGeom(0); return { x: g.x, y: g.y, w: g.w, h: g.h - 58 }; }
+function guestRect() { const g = cardGeom(0); return { x: g.x, y: g.y, w: g.w, h: g.h - 30 }; }
 function guestCardRect() { return cardGeom(0); }
 function billAnchor() { return { x: 1124, y: 470 }; }
 function cashboxRect() { return { x: 988, y: 640, w: 272, h: 48 }; }
@@ -2190,7 +2190,7 @@ function drawRail() {
     const born = c.railBorn ?? (c.railBorn = now);
     const slide = (1 - clamp((now - born) * 4, 0, 1)) * 24;
     const x = g.x + slide, y = g.y, w = g.w, h = g.h;
-    const foodH = 58, bustH = h - foodH;
+    const foodH = 30, bustH = h - foodH;
     const ratio = clamp(c.patience / c.max, 0, 1), atC = c === G.counter;
     const col = ratio > 0.5 ? '#2f6b3a' : ratio > 0.25 ? '#a86b12' : '#9a2b2b';
     ctx.fillStyle = '#fffaf4';
@@ -2210,9 +2210,8 @@ function drawRail() {
     const stuck = atC && short.length && !orderHeld(c) && !fillableLeft(c).length;
     const fy = y + bustH + foodH / 2;
     if (stuck) {
-      btn('swapOrder', x + 8, y + bustH + 6, 112, 22, L('換單', 'Swap'), A.swapOrder, { enabled: !c.swapped, color: '#2a6f6a', size: 12 });
-      btn('sendAway', x + 126, y + bustH + 6, 114, 22, L('請離開', 'Send off'), A.sendAway, { color: '#4a4a4a', size: 12 });
-      iconRow(short.map(k => [k, 1, 'short']), x + 10, y + h - 14, 20, 2, w - 16);
+      btn('swapOrder', x + 6, y + bustH + 4, 114, 22, L('換單', 'Swap'), A.swapOrder, { enabled: !c.swapped, color: '#2a6f6a', size: 12 });
+      btn('sendAway', x + 126, y + bustH + 4, 116, 22, L('請離開', 'Send off'), A.sendAway, { color: '#4a4a4a', size: 12 });
     } else if (c.type === 'regular' && !c.swapped && !c.handed && !short.length) {
       text(L('看黃紙', 'Yellow note'), x + 12, fy, 16, '#7a4b00');
     } else {
@@ -2225,13 +2224,13 @@ function drawRail() {
         if (sp) ents.push([kk, sp, short.includes(kk) ? 'short' : 'self']);
         if (a) ents.push([kk, a, short.includes(kk) ? 'short' : (ml[kk] ? 'need' : (c.handed ? 'done' : 'need'))]);
       });
-      let s2 = 40;
+      let s2 = 26;
       const tot = sz => ents.reduce((t, e) => t + sz + (e[1] > 1 ? sz * 0.3 : 0) + 4, 0);
-      while (s2 > 22 && tot(s2) > w - 16) s2 -= 2;
-      const used = tot(s2);
-      iconRow(ents, x + Math.max(8, (w - used) / 2), fy, s2, 4, w - 12);
+      while (s2 > 16 && tot(s2) > w - 52) s2 -= 2;
+      const used = Math.min(tot(s2), w - 52);
+      iconRow(ents, x + 8, fy, s2, 4, w - 48);
     }
-    if (!stuck && c.type !== 'regular') { jarIcon('spicy', x + w - 36, fy, 16, c.order.spicy); jarIcon('basil', x + w - 16, fy, 16, c.order.basil); }
+    if (!stuck && c.type !== 'regular') { jarIcon('spicy', x + w - 28, fy, 14, c.order.spicy); jarIcon('basil', x + w - 12, fy, 14, c.order.basil); }
     if (atC && !stuck && stockBlocked(c).length) btn('sellShort', x + w - 70, y + bustH + 4, 60, 20, L('照賣', 'Serve'), A.sellShort, { color: '#6b4226', size: 11 });
     else if (atC && !stuck && (c.type === 'byo' || c.sus)) btn('report', x + w - 70, y + bustH + 4, 60, 20, L('檢舉', 'Report'), A.report, { color: '#3b5b92', size: 11 });
     if (canFryTicket(c) && !atC) text(L('可下鍋', 'Fry'), x + 8, y + h - 10, 11, '#8a5a10');
