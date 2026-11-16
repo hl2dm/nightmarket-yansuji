@@ -78,7 +78,7 @@ function prepFood(im) {
   return c2;
 }
 loadImg('bg', 'art/bg_stall.jpg');
-['normal','normal_b','normal_c','student','student_b','regular','aunt','drunk','inspector','byo','inspector_revealed','live'].forEach(k => loadImg('c_' + k, `art/cust_${k}.png?v=body1`));
+['normal','normal_b','normal_c','student','student_b','regular','aunt','drunk','inspector','byo','inspector_revealed','live'].forEach(k => loadImg('c_' + k, `art/cust_${k}.png?v=bust1`));
 ['chicken','tempura','riceblood','bean','mushroom','squid'].forEach(k => loadImg('f_' + k, `art/food_${k}.png`));
 loadImg('tankTop', 'art/fryer_top.jpg'); loadImg('basketTop', 'art/basket_top.png');
 // v3.2:Grok 像素素材(assets/,由 _tools/cutout.py 去綠幕產生);沒載到就退回上面的舊圖
