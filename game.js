@@ -5,17 +5,9 @@ const cv = document.getElementById('game');
 const ctx = cv.getContext('2d', { alpha: false });
 cv.style.cursor = 'none';
 const W = 1280, H = 720;
-const MAX_BUF = 1920;
 let GFX = 'auto';
 try { GFX = localStorage.getItem('yansuji_gfx') || 'auto'; } catch (e) {}
-function wantLite() {
-  if (GFX === 'lite') return true;
-  if (GFX === 'full') return false;
-  const { vw, vh } = stageSize();
-  const cw = Math.max(1, Math.min(vw, vh * 16 / 9));
-  const need = cw * (window.devicePixelRatio || 1);
-  return need < 2200;
-}
+function wantLite() { return GFX === 'lite'; }
 function setGfx(mode) {
   GFX = mode;
   try { localStorage.setItem('yansuji_gfx', mode); } catch (e) {}
@@ -36,18 +28,12 @@ function fitCanvas() {
   cv.style.width = cw + 'px';
   cv.style.height = ch + 'px';
   cv.style.margin = '0';
-  const lite = wantLite();
-  let bw, bh;
-  if (lite) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    bw = Math.max(1, Math.round(cw * dpr));
-    bh = Math.max(1, Math.round(ch * dpr));
-    if (bw > MAX_BUF) { bh = Math.max(1, Math.round(bh * MAX_BUF / bw)); bw = MAX_BUF; }
-  } else {
-    const dpr = window.devicePixelRatio || 1;
-    bw = Math.max(W * 2, Math.round(cw * dpr));
-    bh = Math.round(bw * 9 / 16);
-  }
+  const dpr = window.devicePixelRatio || 1;
+  const cap = wantLite() ? 1280 : 2560;
+  const floor = wantLite() ? 960 : 1280;
+  let bw = Math.round(cw * dpr);
+  bw = Math.max(floor, Math.min(cap, bw));
+  const bh = Math.max(1, Math.round(bw * 9 / 16));
   if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
 }
 function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
@@ -160,7 +146,13 @@ loadImg('burnt', 'assets/food_burnt.png'); loadImg('bigNet', 'public/assets/bask
 loadImg('tank2', 'assets/fryer_tank.png'); loadImg('uiCash', 'assets/ui_cash.png'); loadImg('uiRep', 'assets/ui_rep.png');
 loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bowl_chili.png'); loadImg('bowl_basil', 'assets/food_basil_fried.png'); loadImg('scissorsP', 'assets/scissors.png'); loadImg('bagP', 'assets/food_bag.png'); loadImg('cashTray', 'assets/cash_tray.png');
 ['stall_front','bg_mid','shop_upgrade','night_summary','bg_rain','bg_temple','bg_ghost','bg_blackout','bg_far'].forEach(k => loadImg('sc_' + k, `assets/scene_${k}.jpg`));
-['quiet','lantern','glut','spike','cram','feast','raid','fight','protect','oil','celeb','stockout','rival','crew','parade'].forEach(k => loadImg('news_' + k, `public/assets/news_${k}.png?v=art4`));
+function ensureNews(id) {
+  if (!id) return;
+  const k = 'news_' + id;
+  if (IMG[k] || (IMG._newsLoading && IMG._newsLoading[k])) return;
+  (IMG._newsLoading || (IMG._newsLoading = {}))[k] = 1;
+  loadImg(k, `public/assets/news_${id}.png?v=art4`);
+}
 ['cousin','dare','match','oilvan','kid'].forEach(k => loadImg('fork_' + k, `public/assets/fork_${k}.png?v=art5`));
 loadImg('hand', 'assets/hand_boss.png');
 loadImg('cat', 'assets/cat_market.png');
@@ -463,6 +455,23 @@ function blitFood(im, x, y, w, h, fill) {
   ctx.drawImage(im, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
   ctx.restore();
 }
+const tintCache = new WeakMap();
+function tinted(im, flt) {
+  if (!im || !flt || flt === 'none' || !im.width) return im;
+  let m = tintCache.get(im);
+  if (!m) { m = new Map(); tintCache.set(im, m); }
+  let c = m.get(flt);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = im.width; c.height = im.height;
+    const g = c.getContext('2d');
+    g.filter = flt;
+    g.drawImage(im, 0, 0);
+    m.set(flt, c);
+  }
+  return c;
+}
+const q12 = v => Math.round(clamp(v, 0, 1) * 12) / 12;
 function foodIcon(k, cx, cy, s, fried = true) {
   const im = foodImg(k, fried); if (!im) { ctx.fillStyle = ITEMS[k].color; ctx.beginPath(); ctx.arc(cx, cy, s / 2.4, 0, 7); ctx.fill(); return; }
   blitFood(im, cx - s / 2, cy - s / 2, s, s, true);
@@ -1607,10 +1616,8 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
   const board = IMG['btn_' + boardName(id, opt)];
   ctx.save();
   if (board) {
-    ctx.save();
-    if (!enabled) ctx.globalAlpha = 0.45;
-    blitBoard(board, x, y + dy, w, h);
-    ctx.restore();
+    const flt = !enabled ? 'grayscale(0.7) brightness(0.6)' : down ? 'brightness(0.82)' : (hover || opt.on) ? 'brightness(1.12)' : '';
+    blitBoard(flt ? tinted(board, flt) : board, x, y + dy, w, h);
   } else {
     if (!down) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(x + 2, y + 5, w, h, 10); ctx.fill(); }
     ctx.fillStyle = !enabled ? '#4a4040' : opt.on ? '#f4a261' : hover ? lighten(base) : base;
@@ -2055,8 +2062,10 @@ function chip(key, x, y, d = null, w = 92, h = 34, it = null) {
   if (im) {
     ctx.fillStyle = 'rgba(30,15,6,0.55)'; rr(x, y, w, h, 8); ctx.fill();
     const k = d === null ? 0 : clamp(d / 100, 0, 1);
-    const s2 = h - 2; ctx.drawImage(im, x + 2, y + 1, s2, s2);
-    if (d !== null && k > 0.45) { ctx.globalAlpha = d >= 100 ? 0.55 : (k - 0.45) * 0.35; ctx.fillStyle = '#1a100c'; ctx.fillRect(x + 2, y + 1, s2, s2); ctx.globalAlpha = 1; }
+    const q = q12(k);
+    const flt = d === null ? '' : d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${(1.35 - 0.7 * q).toFixed(2)}) saturate(${(0.6 + 0.6 * q).toFixed(2)})`;
+    const s2 = h - 2;
+    ctx.drawImage(flt ? tinted(im, flt) : im, x + 2, y + 1, s2, s2);
     text(I.name, x + s2 + 4 + (w - s2 - 4) / 2, y + h / 2, 14, '#fff8e7', 'center');
     return;
   }
@@ -2214,8 +2223,8 @@ function customerRowCanvas(theme) {
 function drawCustomerRow(time, theme) {
   if (IMG.counterBg) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(IMG.counterBg, 0, 42, 1280, 244);
-    if (theme === 'blackout' && !has('generator')) { ctx.fillStyle = 'rgba(2,4,12,0.62)'; ctx.fillRect(0, 42, 1280, 244); }
+    const src = (theme === 'blackout' && !has('generator')) ? tinted(IMG.counterBg, 'brightness(0.35)') : IMG.counterBg;
+    ctx.drawImage(src, 0, 42, 1280, 244);
     ctx.restore();
   } else ctx.drawImage(customerRowCanvas(theme), 0, 0);
   const P = STRIP_PAL[theme] || STRIP_PAL.fair, [lr, lg, lb] = P.lamp;
@@ -2510,8 +2519,7 @@ function drawTank() {
   const X = F.x, Y = F.y, TW = F.w, TH = F.h;
   if (IMG.fryerBody) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(IMG.fryerBody, X, Y, TW, TH);
-    if (old) { ctx.fillStyle = 'rgba(40,22,6,0.38)'; ctx.fillRect(X, Y, TW, TH); }
+    ctx.drawImage(old ? tinted(IMG.fryerBody, 'brightness(0.65) sepia(0.4)') : IMG.fryerBody, X, Y, TW, TH);
     ctx.restore();
   } else {
   ctx.fillStyle = '#5c6168'; rr(X, Y, TW, TH, 12); ctx.fill();
@@ -2672,16 +2680,20 @@ function drawSlot(i, net, now, cid) {
     const I = ITEMS[it.key];
     const s = multi ? 48 : big ? 88 : 34, cx = x + 6 + cw * (multi ? j % 2 : j) + cw / 2, cy = y + (multi ? h * 0.38 + Math.floor(j / 2) * (h * 0.36) : h * 0.46);
     const rawI = IMG['raw_' + it.key], frI = IMG['fr_' + it.key], fim = IMG['f_' + (IMG_ALIAS[it.key] || it.key)], k = clamp(it.d / 100, 0, 1);
-    const fit = (im, a) => { if (!im) return; ctx.save(); ctx.globalAlpha = a; blitFood(im, cx - s / 2, cy - s / 2, s, s, false); ctx.restore(); };
-    const scorch = (amt) => { if (amt < 0.04) return; ctx.save(); ctx.globalAlpha = Math.min(0.62, amt); ctx.fillStyle = '#140e0a'; ctx.beginPath(); ctx.arc(cx, cy, s * 0.42, 0, 7); ctx.fill(); ctx.restore(); };
-    if (rawI && frI) { if (it.d >= 100) { fit(IMG.burnt || frI, 1); if (!IMG.burnt) scorch(0.7); }
-      else { const m = clamp((it.d - I.lo * 0.92) / Math.max(4, I.lo * 0.08), 0, 1); fit(rawI, 1); if (m > 0) {
+    const fit = (im, a, flt) => { if (!im) return; ctx.save(); ctx.globalAlpha = a; blitFood(flt ? tinted(im, flt) : im, cx - s / 2, cy - s / 2, s, s, false); ctx.restore(); };
+    if (rawI && frI) { if (it.d >= 100) fit(IMG.burnt || frI, 1, IMG.burnt ? '' : 'brightness(0.2)');
+      else { const m = clamp((it.d - I.lo * 0.92) / Math.max(4, I.lo * 0.08), 0, 1); fit(rawI, 1, 'saturate(0.75) brightness(0.92)'); if (m > 0) {
         const over = it.d > I.hi ? clamp((it.d - I.hi) / Math.max(8, 100 - I.hi), 0, 1) : 0;
         const hot = it.d >= I.lo && it.d <= I.hi;
-        fit(frI, Math.max(m, hot ? 1 : m));
-        scorch(over * 0.7);
+        const qo = q12(over);
+        const flt = over > 0.02 ? `brightness(${(1 - 0.72 * qo).toFixed(2)}) sepia(${(0.25 + 0.5 * qo).toFixed(2)}) saturate(${(1.1 - 0.7 * qo).toFixed(2)})` : hot ? 'saturate(1.25) brightness(1.05)' : '';
+        fit(frI, Math.max(m, hot ? 1 : m), flt);
       } } }
-    else if (fim) { ctx.drawImage(fim, cx - s / 2, cy - s / 2, s, s); scorch(it.d >= 100 ? 0.72 : Math.max(0, k - 0.55) * 0.5); }
+    else if (fim) {
+      const q = q12(k);
+      const flt = it.d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${(1.25 - 0.55 * q).toFixed(2)}) saturate(${(0.7 + 0.5 * q).toFixed(2)})`;
+      ctx.drawImage(tinted(fim, flt), cx - s / 2, cy - s / 2, s, s);
+    }
     else { ctx.fillStyle = I.color; ctx.beginPath(); ctx.arc(cx, cy, s / 3, 0, 7); ctx.fill(); }
   });
   drawFryLife(x, y, w, h, net, now, b);
@@ -3154,6 +3166,7 @@ function drawNewsCard(time) {
   drawBackground(time, 'stall_front');
   ctx.fillStyle = 'rgba(6,3,2,0.62)'; ctx.fillRect(0, 0, W, H);
   const nt = noticeNow();
+  ensureNews(nt && nt.id);
   const src = newsSource(nt);
   const tone = nt.tone || 'neutral';
   const col = tone === 'good' ? '#2c6b4a' : tone === 'bad' ? '#8a3030' : '#8a5a12';
