@@ -4,8 +4,23 @@
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d', { alpha: false });
 cv.style.cursor = 'none';
-const W = 1280, H = 720; // 版面座標。畫布跟視窗走，不再強制 2560。
+const W = 1280, H = 720;
 const MAX_BUF = 1920;
+let GFX = 'auto';
+try { GFX = localStorage.getItem('yansuji_gfx') || 'auto'; } catch (e) {}
+function wantLite() {
+  if (GFX === 'lite') return true;
+  if (GFX === 'full') return false;
+  const { vw, vh } = stageSize();
+  const cw = Math.max(1, Math.min(vw, vh * 16 / 9));
+  const need = cw * (window.devicePixelRatio || 1);
+  return need < 2200;
+}
+function setGfx(mode) {
+  GFX = mode;
+  try { localStorage.setItem('yansuji_gfx', mode); } catch (e) {}
+  fitCanvas();
+}
 function stageSize() {
   const vv = window.visualViewport;
   const vw = document.fullscreenElement ? (document.fullscreenElement.clientWidth || window.innerWidth) : (vv ? vv.width : window.innerWidth);
@@ -21,9 +36,18 @@ function fitCanvas() {
   cv.style.width = cw + 'px';
   cv.style.height = ch + 'px';
   cv.style.margin = '0';
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-  let bw = Math.max(1, Math.round(cw * dpr)), bh = Math.max(1, Math.round(ch * dpr));
-  if (bw > MAX_BUF) { bh = Math.max(1, Math.round(bh * MAX_BUF / bw)); bw = MAX_BUF; }
+  const lite = wantLite();
+  let bw, bh;
+  if (lite) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    bw = Math.max(1, Math.round(cw * dpr));
+    bh = Math.max(1, Math.round(ch * dpr));
+    if (bw > MAX_BUF) { bh = Math.max(1, Math.round(bh * MAX_BUF / bw)); bw = MAX_BUF; }
+  } else {
+    const dpr = window.devicePixelRatio || 1;
+    bw = Math.max(W * 2, Math.round(cw * dpr));
+    bh = Math.round(bw * 9 / 16);
+  }
   if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
 }
 function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
@@ -3701,23 +3725,26 @@ function drawVol() {
   btn('vol', 1232, 4, 40, 32, speak ? '' : (muted ? L('靜', 'M') : L('聲', 'V')), () => { G.settings = !G.settings; }, { bare: !speak, size: 14 });
   if (speak) { ctx.imageSmoothingEnabled = false; ctx.drawImage(speak, 1236, 4, 32, 32); }
   if (!G.settings) { G._settingsRect = null; return; }
-  const x = 760, y = 48, w = 460, h = 348;
+  const x = 760, y = 48, w = 460, h = 400;
   G._settingsRect = { x, y, w, h };
   wood(x, y, w, h);
   text(L('設定', 'Settings'), x + 24, y + 28, 22, '#ffcf6b');
   drawSliderRow('master', x + 24, y + 52, w - 70, L('總音量', 'Master'));
-  drawSliderRow('fry', x + 24, y + 108, w - 70, L('油炸聲', 'Fry'));
-  drawSliderRow('ui', x + 24, y + 164, w - 70, L('提示與收銀', 'Cues'));
-  btn('mute', x + 24, y + 214, 200, 36, muted ? L('取消靜音', 'Unmute') : L('靜音', 'Mute'), () => { if (S) S.setMuted(!S.mix().muted); }, { size: 16, color: muted ? '#2c6b4a' : '#6b4226' });
-  btn('lang', x + 240, y + 214, 190, 36, LANG === 'en' ? 'EN → 中文' : '中文 → EN', () => setLang(LANG === 'en' ? 'zh' : 'en'), { size: 16 });
-  btn('fs', x + 24, y + 264, 406, 40, isFullscreen() ? L('退出全螢幕', 'Exit fullscreen') : L('全螢幕', 'Fullscreen'), toggleFullscreen, { size: 16, color: '#3b5b92' });
-  text(L('點外面或再按喇叭關閉。M 鍵靜音。', 'Click outside to close. M mutes.'), x + 24, y + 322, 13, '#e7d7c3');
+  drawSliderRow('fry', x + 24, y + 100, w - 70, L('油炸聲', 'Fry'));
+  drawSliderRow('ui', x + 24, y + 148, w - 70, L('提示與收銀', 'Cues'));
+  text(L('畫面', 'Picture'), x + 24, y + 206, 14, '#fff6e4');
+  btn('gfxFull', x + 78, y + 190, 150, 32, L('原本', 'Full'), () => setGfx('full'), { size: 15, on: !wantLite(), color: '#6b4226' });
+  btn('gfxLite', x + 238, y + 190, 170, 32, L('壓縮', 'Compact'), () => setGfx('lite'), { size: 15, on: wantLite(), color: '#2a6f6a' });
+  btn('mute', x + 24, y + 236, 200, 36, muted ? L('取消靜音', 'Unmute') : L('靜音', 'Mute'), () => { if (S) S.setMuted(!S.mix().muted); }, { size: 16, color: muted ? '#2c6b4a' : '#6b4226' });
+  btn('lang', x + 240, y + 236, 190, 36, LANG === 'en' ? 'EN → 中文' : '中文 → EN', () => setLang(LANG === 'en' ? 'zh' : 'en'), { size: 16 });
+  btn('fs', x + 24, y + 284, 406, 40, isFullscreen() ? L('退出全螢幕', 'Exit fullscreen') : L('全螢幕', 'Fullscreen'), toggleFullscreen, { size: 16, color: '#3b5b92' });
+  text(L('點外面或再按喇叭關閉。M 鍵靜音。', 'Click outside to close. M mutes.'), x + 24, y + 348, 13, '#e7d7c3');
 }
 
 let vignette = null;
 function render(time) {
   buttons = [];
-  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'low';
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = wantLite() ? 'low' : 'high';
   ctx.save();
   if (G.shake > 0) ctx.translate(rand(-6, 6) * G.shake * 4, rand(-4, 4) * G.shake * 4);
   if (G.phase === 'title') drawTitle(time);
