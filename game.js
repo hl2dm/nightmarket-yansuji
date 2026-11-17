@@ -177,20 +177,195 @@ if (typeof WEATHER_EN !== 'undefined') Object.keys(WEATHER_EN).forEach(k => (WEA
 Object.keys(CTYPES).forEach(k => learn(CTYPES[k].label, CTYPES[k].en));
 ['現金不夠', 'Not enough cash', '冰櫃放不下了', 'Fridge is full', '現金不夠換油', 'Cannot afford new oil', '衛生局稽查員', 'Inspector', '攤家', 'House', '當晚', 'Tonight', '隔夜料滿意度 -8', 'Day-old, mood −8', '無', 'none', '開始進貨', 'Buy stock', '重新開始', 'New game', '今晚紀事', "Tonight's log", '今晚淨變化', 'Net tonight', '收攤 → 設備店', 'Close → shop'].forEach((s, i, a) => { if (i % 2 === 0) learn(s, a[i + 1]); });
 function setLine(c, zh, en) { if (!c) return; c.line = zh; c.lineEn = en || ''; }
+const CHAT_ON = !params.has('chat') || params.get('chat') !== '0';
+let coachAim = null;
+let ticketNeed = {};
+function coachScale() { return 1 + 0.04 * Math.sin(performance.now() / 500 * Math.PI); }
+function planCoach() {
+  coachAim = null;
+  if (!G || drag || G.phase !== 'open' || !G.coach || G.night !== 1 || G.pay || G.forkOpen) return;
+  const c = G.counter;
+  if (!c || !c.handed || c.leaving) return;
+  const Lsn = G.lesson || {};
+  const ml = fillableLeft(c);
+  if (ml.length && !Lsn.fill) { coachAim = { type: 'food', key: ml[0], cid: c.id }; return; }
+  if (!Lsn.fry && canFryTicket(c) && !G.plate.length && !G.fryer.some(n => n.some(it => it.cid === c.id))) {
+    const keys = (c.filled || []).map(it => it.key);
+    const k = keys.find(key => ITEMS[key] && isMeat(key)) || keys[0];
+    const i = k != null ? freeBasket(k) : -1;
+    if (i >= 0) coachAim = { type: 'ticket', cid: c.id, net: i };
+    return;
+  }
+  if (!Lsn.lift) {
+    const ri = G.fryer.findIndex((n, j) => n.length && G.baskets[j].inOil && (G.baskets[j].p || 0) >= SH_LO);
+    if (ri >= 0) coachAim = { type: 'net', net: ri, cid: c.id };
+    return;
+  }
+  if (!Lsn.bag && G.plate.length) coachAim = { type: 'plate', cid: c.id };
+}
+function coachFillKey() { return coachAim && coachAim.type === 'food' ? coachAim.key : ''; }
+function blitVfx() { return false; }
+function wrapBubble(txt) {
+  const chars = [...String(txt || '')];
+  if (!chars.length) return [];
+  const zh = /[\u4e00-\u9fff]/.test(txt);
+  let cap = zh ? 10 : 22;
+  if (chars.length > cap * 2) cap = Math.ceil(chars.length / 2);
+  const lines = [];
+  for (let i = 0; i < chars.length && lines.length < 2; i += cap) lines.push(chars.slice(i, i + cap).join(''));
+  return lines;
+}
+function pushBubble(b) {
+  if (!CHAT_ON || !b || !b.zh) return;
+  const next = { zh: b.zh, en: b.en || '', who: b.who || 'guest', cid: b.cid, reply: b.reply || null, t: 0, dur: 2.6, fade: 0.15, born: false };
+  if (G.bubble && G.bubble.t < G.bubble.dur) { G.bubble.out = true; G.bubbleNext = next; return; }
+  G.bubble = next;
+}
 function sayGuestLine(c, zh, en) {
   if (!c) return;
   if (zh) { c.line = zh; c.lineEn = en || c.lineEn || ''; }
+  if (!CHAT_ON) return;
+  const onRail = c.arrived || c.leaving || (G.walkers || []).some(w => w.c === c);
+  if (!onRail) return;
+  pushBubble({ zh: c.line, en: c.lineEn, who: 'guest', cid: c.id });
 }
-function tickTalk() {}
-function coachFillKey() {
-  if (!G || drag || G.phase !== 'open' || !G.coach || G.night !== 1 || G.pay) return '';
-  const c = G.counter;
-  if (!c || !c.handed) return '';
-  if ((G.lesson || {}).fill) return '';
-  const ml = fillableLeft(c);
-  return ml.length ? ml[0] : '';
+function chatFresh(rows) { return (rows || []).filter(r => r && r[0] && !G.chatUsed[r[0]]); }
+function pickChat(c) {
+  if (typeof CHAT === 'undefined') return null;
+  const conds = [];
+  if (G.t > G.dayLen * 0.75) conds.push('late');
+  if ((G.stats.served || 0) === 0 && c === G.counter) conds.push('early');
+  if (G.oilUse > OIL_LIMIT * 0.75) conds.push('oilDark');
+  if ((G.queue || []).length >= 2) conds.push('crowd');
+  if (c.order && (c.order.items || []).includes('chicken')) conds.push('cutlet');
+  if (c.order && c.order.basil) conds.push('basil');
+  if (c.order && c.order.spicy) conds.push('spicy');
+  if (G.rep >= 80) conds.push('rep');
+  if (chatRng() < 0.5) {
+    const bag = [];
+    conds.forEach(k => ((CHAT.cond && CHAT.cond[k]) || []).forEach(r => bag.push(r)));
+    const ok = chatFresh(bag);
+    if (ok.length) return ok[Math.floor(chatRng() * ok.length)];
+  }
+  if (c.type === 'regular') {
+    const week = CHAT.regular && CHAT.regular[(G.night || 1) - 1];
+    if (!G.regLineUsed && week && !G.chatUsed[week[0]]) { G.regLineUsed = true; return week; }
+    const any = chatFresh(CHAT.regularAny);
+    if (any.length) return any[Math.floor(chatRng() * any.length)];
+    return null;
+  }
+  const table = (c.type === 'inspector' && !c.revealed) ? CHAT.inspector : (CHAT[c.type] || CHAT.normal);
+  const ok = chatFresh(table);
+  return ok.length ? ok[Math.floor(chatRng() * ok.length)] : null;
 }
-function blitVfx() { return false; }
+function fryAgeOf(c) {
+  let age = 0;
+  (G.fryer || []).forEach((net, i) => {
+    const b = G.baskets && G.baskets[i];
+    if (b && b.inOil && net.some(it => it.cid === c.id)) age = Math.max(age, b.age || 0);
+  });
+  return age;
+}
+function tickTalk(dt) {
+  if (!CHAT_ON || !G || G.phase !== 'open') return;
+  const holdChat = !!(G.forkOpen || coachAim);
+  if (G.bubble) {
+    if (!G.forkOpen) G.bubble.t += dt;
+    const b = G.bubble;
+    if (b.t >= b.dur + b.fade) {
+      const reply = !b.out && b.reply;
+      const cid = b.cid;
+      G.bubble = null;
+      if (G.bubbleNext) { const n = G.bubbleNext; G.bubbleNext = null; G.bubble = n; }
+      else if (reply && !holdChat) { G.bubbleGap = 0.3; G.bubbleReply = { zh: reply.zh, en: reply.en, who: 'boss', cid, reply: null, t: 0, dur: 2.6, fade: 0.15 }; }
+    }
+  } else if (G.bubbleGap > 0) {
+    if (!holdChat) G.bubbleGap -= dt;
+    if (G.bubbleGap <= 0 && G.bubbleReply) { G.bubble = G.bubbleReply; G.bubbleReply = null; }
+  }
+  if (holdChat) return;
+  const talk = (c, row) => { if (!row) return; G.chatUsed[row[0]] = 1; pushBubble({ zh: row[0], en: row[1], cid: c.id, who: 'guest', reply: row[2] ? { zh: row[2], en: row[3] } : null }); };
+  (G.counter ? [G.counter] : []).concat(G.queue || []).forEach(c => {
+    if (!c || c.leaving || c.type === 'student') return;
+    const cap = c.type === 'regular' ? 2 : 1;
+    if ((c.bN || 0) >= cap) return;
+    const age = fryAgeOf(c);
+    if (age < 3 + (c.bN || 0) * 5 || c.bRoll) return;
+    c.bRoll = chatRng() < 0.65 ? 'yes' : 'no';
+    if (c.bRoll === 'no') { c.bN = cap; return; }
+    c.bRoll = null;
+    c.bN = (c.bN || 0) + 1;
+    talk(c, pickChat(c));
+  });
+  (G.queue || []).forEach((c, i) => {
+    if (i > 1 || !c || c.type === 'student' || c.saidC || !c.arrived || (c.waited || 0) < 8) return;
+    c.saidC = true;
+    const rows = chatFresh(typeof CHAT !== 'undefined' ? CHAT.queue : []);
+    if (!rows.length) return;
+    const row = rows[Math.floor(chatRng() * rows.length)];
+    talk(c, row);
+  });
+}
+function bubbleAlpha(b) {
+  if (!b) return 0;
+  if (b.t < b.fade) return b.t / b.fade;
+  if (b.t > b.dur) return clamp(1 - (b.t - b.dur) / b.fade, 0, 1);
+  return 1;
+}
+function bustHeadTop(c) {
+  const slot = bustSlot();
+  const im = c && custImg(c);
+  if (!im) return slot.y + 8;
+  const dh = im.height * (slot.w * 0.602 / im.width);
+  return counterDest().lipY - dh * 0.46;
+}
+function drawSpeech(cx, top, lines, dark, alpha, tail) {
+  if (!lines.length || alpha < 0.02) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = `normal 16px ${FONT}`;
+  const tw = Math.max(48, ...lines.map(l => ctx.measureText(l).width));
+  const pad = 10, lh = 22, bw = tw + pad * 2, bh = lines.length * lh + pad;
+  let x = clamp(cx - bw / 2, 8, W - bw - 8);
+  let y = Math.max(46, top - bh - (tail ? 12 : 4));
+  ctx.fillStyle = dark ? '#24160e' : '#f4ead4';
+  rr(x, y, bw, bh, 8); ctx.fill();
+  ctx.strokeStyle = dark ? '#e7c89a' : '#5c3b22';
+  ctx.lineWidth = 2; rr(x, y, bw, bh, 8); ctx.stroke();
+  if (tail) {
+    const tx = clamp(cx, x + 16, x + bw - 16);
+    ctx.beginPath();
+    ctx.moveTo(tx - 7, y + bh - 1);
+    ctx.lineTo(tx, y + bh + 11);
+    ctx.lineTo(tx + 7, y + bh - 1);
+    ctx.closePath();
+    ctx.fillStyle = '#f4ead4'; ctx.fill();
+    ctx.strokeStyle = '#5c3b22'; ctx.stroke();
+  }
+  ctx.fillStyle = dark ? '#fff6e4' : '#3a2416';
+  ctx.font = `normal 16px ${FONT}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  lines.forEach((l, i) => ctx.fillText(l, x + pad, y + pad / 2 + lh * i + lh / 2));
+  ctx.restore();
+}
+function drawBubbles() {
+  const b = G.bubble;
+  if (!b || G.forkOpen) return;
+  if (!b.born) { b.born = true; sfx('click'); }
+  const lines = wrapBubble(L(b.zh, b.en));
+  if (b.who === 'boss') {
+    const c = custById(b.cid) || G.counter;
+    const g = c ? ticketRectOf(c) : { x: 480, y: 180, w: 280, h: 80 };
+    drawSpeech(g.x + g.w * 0.55, g.y + g.h + 8, lines, true, bubbleAlpha(b), false);
+    return;
+  }
+  const walker = (G.walkers || []).find(w => w.c && w.c.id === b.cid);
+  const c = walker ? walker.c : (custById(b.cid) || (G.counter && G.counter.id === b.cid ? G.counter : null));
+  if (!c) return;
+  const x = walker ? walker.x : (c.x || slotHome(0));
+  drawSpeech(x, bustHeadTop(c) - 6, lines, false, bubbleAlpha(b), true);
+}
 function lineOf(c) { if (!c) return ''; return LANG === 'en' ? (c.lineEn || tr(c.line || '')) : (c.line || ''); }
 function lastText() { const l = G.lastLine; if (!l) return ''; return LANG === 'en' ? (l.textEn || tr(l.text || '')) : (l.textZh || l.text || ''); }
 function pickLine(key, from = 0) {
@@ -283,7 +458,7 @@ function jarIcon(id, cx, cy, s, want = true) {
 let coachDots = {};
 function iconBadge(k, n, cx, cy, s, st = 'self', mark = false) {
   if (st === 'need') {
-    if (mark) coachDots[k] = [cx, cy];
+    if (mark) ticketNeed[k] = [cx, cy];
     ctx.save(); ctx.setLineDash([3, 2]); ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(cx, cy, s * 0.46, 0, 7); ctx.stroke(); ctx.setLineDash([]);
     ctx.globalAlpha = 0.28 + 0.15 * pulse(5); foodIcon(k, cx, cy, s * 0.8, false); ctx.restore();
@@ -1243,6 +1418,7 @@ function update(dt) {
     }
     if (c.patience <= 0) { G.stats.lost++; changeRep(-2); addLog(`${CTYPES[c.type].label}等太久,離開了`, `${CTYPES[c.type].en} waited too long and left`); const pl = pickLine('angry', 1); leave(c, pl.zh, true, pl.en); resetPrep(); }
   }
+  planCoach();
   tickTalk(dt);
   clipTickets();
   pullRackForCounter();
@@ -2355,7 +2531,19 @@ function drawSlot(i, net, now, cid) {
   const finish = () => { if (draining) ctx.restore(); };
   ctx.fillStyle = on ? 'rgba(20,10,4,0.28)' : 'rgba(20,10,4,0.12)'; rr(x, y, w, h, 10); ctx.fill();
   const netI = (big ? IMG.bigNet : IMG.smallNet) || IMG.basketTop;
-  if (netI) { ctx.save(); ctx.globalAlpha = on ? 0.92 : 0.8; ctx.imageSmoothingEnabled = false; ctx.drawImage(netI, x, y, w, h); ctx.restore(); }
+  if (netI) {
+    ctx.save();
+    ctx.globalAlpha = on ? 0.92 : 0.8;
+    ctx.imageSmoothingEnabled = false;
+    if (coachAim && coachAim.type === 'net' && coachAim.net === i) {
+      const sc = coachScale();
+      ctx.translate(x + w / 2, y + h / 2);
+      ctx.scale(sc, sc);
+      ctx.translate(-(x + w / 2), -(y + h / 2));
+    }
+    ctx.drawImage(netI, x, y, w, h);
+    ctx.restore();
+  }
   if (!on) { finish(); return; }
   const multi = big && net.length > 1, n = big ? (multi ? 2 : 1) : Math.max(1, net.length), cw = (w - 12) / (big && multi ? 2 : Math.max(1, net.length)), P = b.p || 0;
   net.forEach((it, j) => {
@@ -2420,7 +2608,15 @@ function drawRight() {
     if (en) btn('dump', X + 190, 292, 78, 28, L('倒掉', 'Dump'), A.dump, { color: '#6b4226', size: 14 });
     const well = plateRect();
     ctx.save();
-    if (IMG.plateWell) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.plateWell, well.x, well.y, well.w, well.h); }
+    if (IMG.plateWell) {
+      ctx.imageSmoothingEnabled = false;
+      if (coachAim && coachAim.type === 'plate') {
+        const sc = coachScale();
+        const cx = well.x + well.w / 2, cy = well.y + well.h / 2;
+        ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.translate(-cx, -cy);
+      }
+      ctx.drawImage(IMG.plateWell, well.x, well.y, well.w, well.h);
+    }
     else {
     ctx.fillStyle = '#6e757c'; rr(well.x - 4, well.y - 4, well.w + 8, well.h + 8, 16); ctx.fill();
     ctx.fillStyle = '#c5ccd2'; rr(well.x, well.y, well.w, well.h, 14); ctx.fill();
@@ -2670,6 +2866,29 @@ function drawCounterLip() {
   ctx.drawImage(IMG.counterBg, 0, COUNTER_TOP_SRC_Y, srcW, sh, 0, destY + COUNTER_TOP_SRC_Y * scale, 1280, sh * scale);
   ctx.restore();
 }
+function patienceStyle(ratio) {
+  const r = clamp(ratio, 0, 1);
+  const bands = [
+    { t: 1, tint: null, a: 0, border: [58, 36, 22] },
+    { t: 0.60, tint: [255, 214, 110], a: 0.42, border: [224, 160, 32] },
+    { t: 0.35, tint: [255, 154, 64], a: 0.5, border: [232, 100, 26] },
+    { t: 0.15, tint: [255, 112, 96], a: 0.55, border: [214, 40, 40] },
+    { t: 0, tint: [240, 80, 72], a: 0.62, border: [214, 40, 40] },
+  ];
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  for (let i = 0; i < bands.length - 1; i++) {
+    const hi = bands[i], lo = bands[i + 1];
+    if (r <= hi.t && r >= lo.t) {
+      const t = (hi.t - r) / Math.max(0.0001, hi.t - lo.t);
+      const border = mix(hi.border, lo.border, t);
+      let tint = null, a = 0;
+      if (hi.tint && lo.tint) { tint = mix(hi.tint, lo.tint, t); a = hi.a + (lo.a - hi.a) * t; }
+      else if (lo.tint) { tint = lo.tint; a = lo.a * t; }
+      return { tint, a, border: `rgb(${border[0]},${border[1]},${border[2]})`, shake: r < 0.15 };
+    }
+  }
+  return { tint: null, a: 0, border: '#3a2416', shake: false };
+}
 function drawRail() {
   const list = (G.counter ? [G.counter] : []).concat(G.queue || []);
   if (!list.length) return;
@@ -2680,18 +2899,33 @@ function drawRail() {
     const x = g.x, y = g.y, w = g.w, h = g.h;
     const foodH = bust.foodH;
     const ratio = clamp(c.patience / c.max, 0, 1), atC = c === G.counter;
-    const col = ratio > 0.5 ? '#2f6b3a' : ratio > 0.25 ? '#a86b12' : '#9a2b2b';
-    ctx.fillStyle = '#fffaf4';
-    if (IMG.orderSlip) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.orderSlip, x, y + h - foodH, w, foodH); ctx.restore(); }
-    else { rr(x, y + h - foodH, w, foodH, 4); ctx.fill(); }
-    ctx.strokeStyle = atC ? '#c8962e' : '#2b1a0e'; ctx.lineWidth = atC ? 3 : 1.5;
-    rr(x, y + h - foodH, w, foodH, 4); ctx.stroke();
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(x + 10, y + h - foodH - 4, w - 20, 3);
-    ctx.fillStyle = col;
-    ctx.fillRect(x + 10, y + h - foodH - 4, (w - 20) * ratio, 3);
-    ctx.fillStyle = atC ? '#c8962e' : '#1d7a6e';
-    ctx.fillRect(x + 2, y + h - foodH + 3, 4, foodH - 6);
+    const mood = patienceStyle(ratio);
+    const px = x, py = y + h - foodH, pw = w, ph = foodH;
+    const pulseTicket = !!(coachAim && coachAim.type === 'ticket' && coachAim.cid === c.id);
+    const sc = pulseTicket ? coachScale() : 1;
+    const shake = mood.shake ? Math.sin(performance.now() / 250 * Math.PI * 2) * 2 : 0;
+    ctx.save();
+    ctx.translate(px + pw / 2 + shake, py + ph / 2);
+    ctx.scale(sc, sc);
+    ctx.translate(-(px + pw / 2), -(py + ph / 2));
+    ctx.save();
+    ctx.beginPath(); rr(px, py, pw, ph, 4); ctx.clip();
+    if (IMG.orderSlip) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.orderSlip, px, py, pw, ph); }
+    else { ctx.fillStyle = '#fffaf4'; ctx.fillRect(px, py, pw, ph); }
+    if (mood.tint && mood.a > 0.02) {
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = mood.a;
+      ctx.fillStyle = `rgb(${mood.tint[0]},${mood.tint[1]},${mood.tint[2]})`;
+      ctx.fillRect(px, py, pw, ph);
+    }
+    ctx.restore();
+    ctx.strokeStyle = pulseTicket ? '#ffe7a8' : mood.border;
+    ctx.lineWidth = atC ? 4 : 2;
+    rr(px, py, pw, ph, 4); ctx.stroke();
+    ctx.fillStyle = 'rgba(40,24,12,0.35)';
+    ctx.fillRect(px + 8, py + 3, pw - 16, 6);
+    ctx.fillStyle = pulseTicket ? '#ffe7a8' : mood.border;
+    ctx.fillRect(px + 8, py + 3, Math.max(0, (pw - 16) * ratio), 6);
     const short = shortItems(c);
     const stuck = atC && !G.pay && short.length && !orderHeld(c) && !fillableLeft(c).length;
     const fy = y + h - foodH / 2;
@@ -2730,6 +2964,7 @@ function drawRail() {
     if (atC && !stuck && stockBlocked(c).length) btn('sellShort', x + w - 62, y + h - foodH - 26, 56, 22, L('照賣', 'Serve'), A.sellShort, { color: '#6b4226', size: 14 });
     else if (atC && !stuck && (c.type === 'byo' || c.sus)) btn('report', x + w - 62, y + h - foodH - 26, 56, 22, L('檢舉', 'Report'), A.report, { color: '#3b5b92', size: 14 });
     if (canFryTicket(c) && !atC) text(L('可下鍋', 'Fry'), x + 8, y + h - 10, 11, '#8a5a10');
+    ctx.restore();
   });
   if (list.length > 3) text(`+${list.length - 3}`, cardGeom(2).x + cardGeom(2).w + 10, 70, 13, '#ffd166');
 }
@@ -2880,12 +3115,12 @@ function drawResults(time) {
   drawBackground(time, 'night_summary');
   wood(160, 28, 960, 664);
   const s = G.stats;
-  let y = 78;
+  let y = 110;
   const gradeCol = { S: '#ffd166', A: '#06d6a0', B: '#9ad1ff', C: '#ff6b6b' }[s.grade] || '#fff';
   text(L(`第 ${G.night} 週`, `Week ${G.night}`), 220, y, 18, '#ffd59a');
-  text(s.grade || '—', 340, y, 56, gradeCol, 'center');
+  text(s.grade || '—', 360, y, 56, gradeCol, 'center');
   const net = Math.round(s.net || 0);
-  text(`${net >= 0 ? '+' : '−'}$${Math.abs(net)}`, 400, y - 6, 36, net >= 0 ? '#ffd166' : '#ff6b6b');
+  text(`${net >= 0 ? '+' : '−'}$${Math.abs(net)}`, 430, y - 6, 36, net >= 0 ? '#ffd166' : '#ff6b6b');
   const note = {
     happy: L('客人都滿意', 'Guests left happy'),
     ok: L('這週大致穩住', 'Steady enough'),
@@ -2894,24 +3129,38 @@ function drawResults(time) {
     angry: L('火候和味道不穩', 'Watch the fry'),
     empty: L('這週沒服務到人', 'Nobody was served'),
   }[s.gradeWhy] || '';
-  text(note, 400, y + 28, 18, '#f3e6d0');
-  y = 168;
+  text(note, 430, y + 28, 18, '#f3e6d0');
+  y = 260;
   const income = Math.round((s.revenue || 0) + (s.tips || 0) + (s.rewards || 0));
   const stockOil = Math.round((s.buy || 0) + (s.cost || 0));
-  const rows = [[L('收入', 'In'), income], [L('進貨與換油', 'Stock and oil'), -stockOil], [L('房租', 'Rent'), -Math.round(s.paid || 0)]];
-  if (s.fines) rows.push([L('罰款', 'Fines'), -Math.round(s.fines)]);
-  rows.forEach(([k, v]) => {
+  const rows = [
+    [L('收入', 'In'), income, 'in'],
+    [L('進貨與換油', 'Stock and oil'), -stockOil, 'stock'],
+    [L('房租', 'Rent'), -Math.round(s.paid || 0), 'rent'],
+  ];
+  if (s.fines) rows.push([L('罰款', 'Fines'), -Math.round(s.fines), 'fine']);
+  rows.forEach(([k, v, kind]) => {
     const n = Math.round(v);
+    if (kind === 'in') coinIcon(200, y, 18);
+    else if (kind === 'stock') { ctx.strokeStyle = '#e7d7c3'; ctx.lineWidth = 1.5; ctx.strokeRect(191, y - 7, 16, 14); }
+    else if (kind === 'rent') {
+      ctx.strokeStyle = '#e7d7c3'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(191, y + 2); ctx.lineTo(199, y - 7); ctx.lineTo(207, y + 2); ctx.stroke();
+      ctx.strokeRect(194, y + 2, 10, 7);
+    } else {
+      ctx.strokeStyle = '#ff9f80'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(193, y - 6); ctx.lineTo(205, y + 6); ctx.moveTo(205, y - 6); ctx.lineTo(193, y + 6); ctx.stroke();
+    }
     text(k, 220, y, 20, '#e8dcc8');
-    text(n === 0 ? '$0' : `${n < 0 ? '−' : '+'}$${Math.abs(n)}`, 760, y, 20, n < 0 ? '#ff9f80' : '#fff', 'right');
-    y += 32;
+    text(n === 0 ? '$0' : `${n < 0 ? '−' : '+'}$${Math.abs(n)}`, 520, y, 20, n < 0 ? '#ff9f80' : '#fff', 'right');
+    y += 40;
   });
-  y += 8;
+  y += 18;
   text(L(`現金 $${Math.round(G.cash)} / $${STALL_PRICE}`, `Cash $${Math.round(G.cash)} / $${STALL_PRICE}`), 220, y, 16, '#ffd59a');
   drawBuyMeter(520, y - 6, 280);
-  y += 36;
+  y = 500;
   text(L(`服務 ${s.served}　滿意 ${s.happy}　流失 ${s.lost}　口碑 ${Math.round(G.repStart)} → ${Math.round(G.rep)}`, `Served ${s.served}  happy ${s.happy}  lost ${s.lost}  rep ${Math.round(G.repStart)} → ${Math.round(G.rep)}`), 220, y, 18, '#f3e6d0');
-  y += 34;
+  y = 548;
   const tail = [];
   if (s.spoil) tail.push(L(`報廢 $${Math.round(s.spoil)}`, `Spoiled $${Math.round(s.spoil)}`));
   if (s.waste) tail.push(L(`浪費 $${Math.round(s.waste)}`, `Wasted $${Math.round(s.waste)}`));
@@ -3115,42 +3364,33 @@ function fryTargetNet(c) {
   return [r.x + r.w / 2, r.y + r.h / 2];
 }
 function drawCoach() {
-  if (drag || G.phase !== 'open' || !G.coach || G.night !== 1 || G.pay) return;
+  if (!coachAim || drag) return;
   const c = G.counter;
-  if (!c || !c.handed) return;
-  const Lsn = G.lesson || {};
-  const ml = fillableLeft(c);
-  let step = null;
-  if (ml.length && !Lsn.fill && coachDots[ml[0]]) step = { a: ITEM_POS(ml[0]), b: coachDots[ml[0]], key: ml[0] };
-  else if (!Lsn.fry && canFryTicket(c) && !G.plate.length && !G.fryer.some(n => n.some(it => it.cid === c.id))) {
-    const net = fryTargetNet(c);
-    if (net) step = { a: slipCenter(c), b: net, img: IMG.orderSlip };
-  } else if (!Lsn.lift) {
-    const ri = G.fryer.findIndex((n, j) => n.length && G.baskets[j].inOil && (G.baskets[j].p || 0) >= SH_LO);
-    if (ri >= 0) {
-      const r = slotRect(ri);
-      step = { a: [r.x + r.w / 2, r.y + r.h / 2], b: plateCenter(), img: IMG.bigNet || IMG.smallNet };
-    }
-  } else if (!Lsn.bag && G.plate.length) step = { a: plateCenter(), b: slipCenter(c), img: IMG.plateWell };
-  if (!step) return;
-  const pulse = 1 + 0.06 * Math.sin(performance.now() / 500 * Math.PI);
-  ctx.save();
-  ctx.globalAlpha = 0.5 + 0.35 * Math.sin(performance.now() / 500 * Math.PI);
-  if (step.key) foodIcon(step.key, step.a[0], step.a[1], 44 * pulse, false);
-  else if (step.img) {
-    const s = 56 * pulse;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(step.img, step.a[0] - s / 2, step.a[1] - s / 2, s, s);
+  if (!c) return;
+  let a = slipCenter(c), b = a;
+  if (coachAim.type === 'food') {
+    a = ITEM_POS(coachAim.key);
+    b = ticketNeed[coachAim.key] || slipCenter(c);
+  } else if (coachAim.type === 'ticket') {
+    a = slipCenter(c);
+    const r = slotRect(coachAim.net);
+    b = [r.x + r.w / 2, r.y + r.h / 2];
+  } else if (coachAim.type === 'net') {
+    const r = slotRect(coachAim.net);
+    a = [r.x + r.w / 2, r.y + r.h / 2];
+    b = plateCenter();
+  } else {
+    a = plateCenter();
+    b = slipCenter(c);
   }
-  ctx.restore();
   const cycle = 2.7, t = (performance.now() / 1000) % cycle;
   let k = 1, alpha = 0;
   if (t < 0.9) { k = t / 0.9; alpha = 0.85; }
   else if (t < 1.2) { k = 1; alpha = 0.85; }
   else if (t < 1.5) { k = 1; alpha = 0.85 * (1 - (t - 1.2) / 0.3); }
   if (alpha > 0.02 && IMG.hand) {
-    const x = step.a[0] + (step.b[0] - step.a[0]) * k;
-    const y = step.a[1] + (step.b[1] - step.a[1]) * k;
+    const x = a[0] + (b[0] - a[0]) * k;
+    const y = a[1] + (b[1] - a[1]) * k;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.imageSmoothingEnabled = false;
@@ -3191,9 +3431,12 @@ function render(time) {
   else if (G.phase === 'shop') drawShop(time);
   else {
     coachDots = {};
+    ticketNeed = {};
+    planCoach();
     drawScene(time); drawStation(); drawHUD(); drawBoonChips();
     drawFx();
     drawCoach();
+    drawBubbles();
     if (G.theme === 'blackout' && !has('generator')) {
       const flick = Math.sin(performance.now() / 90) > 0.96 ? 0.12 : 0.4;
       ctx.fillStyle = `rgba(2,6,18,${flick})`; ctx.fillRect(0, 40, W, H - 40);
@@ -3232,6 +3475,6 @@ function frame(now) {
 newGame();
 if (params.has('autostart')) A.start();
 // 測試介面
-window.__game = { mustLeft: () => mustLeft(G.counter), get state() { return G; }, get buttons() { return buttons.map(({ onClick, ...b }) => b); }, A, ITEMS, SELF_MENU, MENU, nightGrade, billRows, batchQty, guestQuota, step: (dt) => { update(dt); render(performance.now() / 1000); } };
+window.__game = { mustLeft: () => mustLeft(G.counter), aim: () => coachAim, need: () => ({ ...ticketNeed }), get state() { return G; }, get buttons() { return buttons.map(({ onClick, ...b }) => b); }, A, ITEMS, SELF_MENU, MENU, nightGrade, billRows, batchQty, guestQuota, step: (dt) => { update(dt); render(performance.now() / 1000); } };
 requestAnimationFrame(frame);
 })();
