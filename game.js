@@ -569,6 +569,18 @@ function makeOrder(type) {
   return { items, add, spicy: rng() < 0.5, basil: rng() < 0.4 };
 }
 
+function pickLook(type) {
+  const pool = { normal: ['normal', 'normal_b', 'normal_c'], student: ['student', 'student_b'], live: ['live'] }[type] || [type];
+  const used = new Set();
+  const mark = c => { if (c && c.look) used.add(c.look); };
+  if (typeof G !== 'undefined' && G) {
+    mark(G.counter);
+    (G.queue || []).forEach(mark);
+    (G.walkers || []).forEach(w => mark(w.c));
+  }
+  const free = pool.filter(k => !used.has(k));
+  return pick(free.length ? free : pool);
+}
 function spawn(type) {
   const ct = CTYPES[type];
   const nt = noticeNow();
@@ -576,7 +588,7 @@ function spawn(type) {
   const c = { id: G.nextId++, type, order: makeOrder(type), patience: ct.patience * (has('fan') ? 1.2 : 1) * ((THEMES[G.theme] || {}).patience || 1) * pace, max: ct.patience * (has('fan') ? 1.2 : 1) * ((THEMES[G.theme] || {}).patience || 1) * pace,
     x: W + 160, tx: 0, atCounter: 0, changed: false, sus: type === 'byo' && rng() < 0.6, revealed: false,
     arrived: false, leaving: false,
-    hue: rand(-15, 15), line: '', look: pick({ normal: ['normal', 'normal_b', 'normal_c'], student: ['student', 'student_b'], live: ['live'] }[type] || [type]) };
+    hue: rand(-15, 15), line: '', look: pickLook(type) };
   const key = type === 'byo' ? (c.sus ? 'byoSus' : 'byo') : LINES[type] ? type : 'greet';
   const pl = pickLine(key); setLine(c, pl.zh, pl.en);
   const wline = pickWeather();
@@ -813,7 +825,7 @@ const A = {
     const p = G.pay, c = G.counter;
     const ch = c.type === 'aunt' ? 0.3 + G.rep / 250 : c.type === 'drunk' ? 0.6 : 0.7;
     if (rng() < ch) { setLine(c, '…好啦,算你狠。', '…Fine. You win.'); finishPay(p.price); }
-    else { addLog(`${CTYPES[c.type].label}不爽走人,沒付錢`, `${CTYPES[c.type].en} stormed off without paying`); changeRep(-1); G.stats.angry++; leave(c, '不賣就算了!', true, 'Then forget it!'); G.plate = []; resetPrep(); }
+    else { addLog(`${CTYPES[c.type].label}不爽走人,沒付錢`, `${CTYPES[c.type].en} stormed off without paying`); changeRep(-1); G.stats.lost++; leave(c, '不賣就算了!', true, 'Then forget it!'); G.plate = []; resetPrep(); }
   },
   payFull() { finishPay(G.pay.price); },
   refuse() { addLog('拒絕賣給客人', 'Refused the sale'); G.stats.waste += G.pay.matchedCost; leave(G.counter, '哼!', true, 'Hmph!'); G.plate = []; resetPrep(); },
@@ -1170,7 +1182,7 @@ function update(dt) {
       c.changed = true; const ok = MENU.filter(k => stockOf(k) > 0); const k = ok.length ? pick(ok) : 'tempura'; c.order.items.push(k); (c.order.add = c.order.add || []).push(k); c.order.items.sort((a, b) => MENU.indexOf(a) - MENU.indexOf(b));
       setLine(c, `嗝…再加一份${ITEMS[k].name}!`, `Hic… one more ${ITEMS[k].en}!`); (c.need = c.need || []).push(k); popup(L('臨時加點', 'Add-on!'), 800, 140, '#ffb703');
     }
-    if (c.patience <= 0) { G.stats.lost++; G.stats.angry++; changeRep(-2); addLog(`${CTYPES[c.type].label}等太久,生氣走了`, `${CTYPES[c.type].en} got mad and left`); const pl = pickLine('angry', 1); leave(c, pl.zh, true, pl.en); resetPrep(); }
+    if (c.patience <= 0) { G.stats.lost++; changeRep(-2); addLog(`${CTYPES[c.type].label}等太久,離開了`, `${CTYPES[c.type].en} waited too long and left`); const pl = pickLine('angry', 1); leave(c, pl.zh, true, pl.en); resetPrep(); }
   }
   clipTickets();
   pullRackForCounter();
@@ -1406,7 +1418,11 @@ function billRows(lines) {
   });
   return rows;
 }
-function billAnchor() { return { x: 900, y: 500 }; }
+function billAnchor() {
+  const c = G.counter;
+  if (c && c.x != null && ticketLive(c)) return { x: Math.min(1180, c.x + 96), y: 86 };
+  return { x: 1124, y: 220 };
+}
 function cashboxRect() { return { x: 988, y: 640, w: 272, h: 48 }; }
 function rackRect(i) {
   const F = fryFrame();
@@ -1804,7 +1820,7 @@ function drawCustomerRow(time, theme) {
 function drawScene(time) {
   drawCustomerRow(time, G.theme || 'fair');
   ctx.fillStyle = 'rgba(14,8,5,0.97)'; ctx.fillRect(0, STRIP.y1, W, H - STRIP.y1);
-  drawNotebook(8, 198);
+  drawNotebook(1104, 52);
   drawRail();
   G.walkers.forEach(w => {
     const b = bustSlot();
@@ -1984,9 +2000,9 @@ function drawLeft() {
     ctx.font = `normal ${ns}px ${FONT}`;
     text(ctx.measureText(nm).width <= nameMax ? nm : oneLine(nm, nameMax, ns), tx, nameY, ns);
     const priceSize = tight ? 10 : 12;
-    if (short && k !== 'byo') text(oneLine(G.rescueUsed ? L('沒了', 'Out') : L(`補 $${rescueCost(k)}`, `+$${rescueCost(k)}`), nameMax, priceSize), tx, priceY, priceSize, '#ffb4a8');
+    if (short && k !== 'byo') text(oneLine(G.rescueUsed ? L('沒了', 'Out') : L(`補 $${rescueCost(k)}`, `Restock $${rescueCost(k)}`), nameMax, priceSize), tx, priceY, priceSize, '#ffb4a8');
     else {
-      const stock = k === 'byo' ? '' : (v.old ? `剩${q} 舊${v.old}` : `剩${q}`);
+      const stock = k === 'byo' ? '' : (v.old ? L(`剩${q} 舊${v.old}`, `${q} left, ${v.old} old`) : L(`剩${q}`, `${q} left`));
       const price = `$${salePrice(k)}`;
       ctx.font = `normal ${priceSize}px ${FONT}`;
       const both = stock ? `${price} ${stock}` : price;
@@ -2094,28 +2110,38 @@ function slotState(it) {
   if (it.d <= I.hi) return { lab: '剛好!', col: '#21b36b', fg: '#eafff2', ready: true };
   { const t = clamp((it.d - I.hi) / Math.max(1, 100 - I.hi), 0, 1); return { lab: '快焦!', col: `rgb(${Math.round(240 - 20 * t)},${Math.round(140 - 100 * t)},${Math.round(40)})`, fg: '#ffe0d6', warn: true }; }
 }
-function drawFryLife(x, y, w, h, net, now) {
+function drawFryLife(x, y, w, h, net, now, b) {
   if (!net.length) return;
-  const maxD = Math.max(...net.map(it => it.d));
-  const burnt = net.some(it => it.d >= 100);
+  const p = b ? (b.p || 0) : Math.max(...net.map(it => it.d));
+  const age = b ? (b.age || 0) : 1;
+  const burnt = p >= 100;
+  const stage = burnt ? 'burn' : p > SH_HI ? 'smoke' : p >= SH_LO - 10 ? 'fine' : age < 1.2 ? 'burst' : 'roll';
   ctx.save();
-  if (!burnt) {
-    const bubbles = 3 + Math.floor(clamp(maxD, 0, 80) / 20);
-    ctx.strokeStyle = 'rgba(255,246,210,0.8)'; ctx.lineWidth = 1;
-    for (let i = 0; i < bubbles; i++) {
-      const px = x + 12 + ((i * 41 + Math.floor(now * 24)) % Math.max(8, w - 24));
-      const ph = (now * 26 + i * 13) % (h * 0.5);
-      ctx.globalAlpha = 0.35 + (i % 3) * 0.12;
-      ctx.beginPath(); ctx.arc(px, y + h - 10 - ph, 1.5 + (i % 3), 0, 7); ctx.stroke();
+  const bubble = (n, r0, r1, alpha, speed) => {
+    ctx.strokeStyle = 'rgba(255,248,220,0.9)';
+    ctx.lineWidth = stage === 'fine' ? 1 : 1.5;
+    for (let i = 0; i < n; i++) {
+      const px = x + 8 + ((i * 37 + Math.floor(now * speed)) % Math.max(10, w - 16));
+      const py = y + 8 + ((i * 19 + Math.floor(now * (speed * 0.7))) % Math.max(10, h - 16));
+      const pulse = 0.65 + 0.35 * Math.sin(now * 9 + i);
+      ctx.globalAlpha = alpha * pulse;
+      ctx.beginPath();
+      ctx.arc(px, py, r0 + (i % 3) * ((r1 - r0) / 2), 0, 7);
+      ctx.stroke();
     }
-  }
-  if (maxD > 72 || burnt) {
-    const puffs = burnt ? 4 : 3;
-    ctx.fillStyle = burnt ? 'rgba(28,28,28,0.8)' : 'rgba(220,214,204,0.7)';
+  };
+  if (stage === 'burst') bubble(14, 5, 11, 0.85, 30);
+  else if (stage === 'roll') bubble(9, 3, 5, 0.7, 18);
+  else if (stage === 'fine') bubble(18, 1.2, 2.4, 0.75, 22);
+  if (stage === 'smoke' || burnt) {
+    const puffs = burnt ? 7 : 3;
     for (let i = 0; i < puffs; i++) {
-      const rise = (now * (burnt ? 24 : 16) + i * 11) % (burnt ? 40 : 26);
-      ctx.globalAlpha = burnt ? 0.55 : 0.32;
-      ctx.beginPath(); ctx.arc(x + w * 0.28 + i * (w * 0.16), y + 10 - rise, (burnt ? 6 : 4) + (i % 2), 0, 7); ctx.fill();
+      const rise = (now * (burnt ? 28 : 14) + i * 13) % (burnt ? 52 : 28);
+      ctx.fillStyle = burnt ? 'rgba(18,18,18,0.85)' : 'rgba(230,226,216,0.75)';
+      ctx.globalAlpha = burnt ? 0.7 : 0.45;
+      ctx.beginPath();
+      ctx.arc(x + w * 0.22 + (i % 4) * (w * 0.18), y + 8 - rise, (burnt ? 7 : 3) + (i % 2) * 2, 0, 7);
+      ctx.fill();
     }
   }
   ctx.restore();
@@ -2141,7 +2167,7 @@ function drawSlot(i, net, now, cid) {
     const rawI = IMG['raw_' + it.key], frI = IMG['fr_' + it.key], fim = IMG['f_' + (IMG_ALIAS[it.key] || it.key)], k = clamp(it.d / 100, 0, 1);
     const fit = (im, a, flt) => { if (!im) return; ctx.save(); ctx.globalAlpha = a; if (flt) ctx.filter = flt; blitFood(im, cx - s / 2, cy - s / 2, s, s, false); ctx.restore(); };
     if (rawI && frI) { if (it.d >= 100) fit(IMG.burnt || frI, 1, IMG.burnt ? '' : 'brightness(0.2)');
-      else { const m = clamp((it.d - I.lo * 0.45) / Math.max(8, I.lo * 0.55), 0, 1); fit(rawI, 1 - m * 0.85); if (m > 0) {
+      else { const m = clamp((it.d - I.lo * 0.82) / Math.max(6, I.lo * 0.18), 0, 1); fit(rawI, 1 - m * 0.85); if (m > 0) {
         const over = it.d > I.hi ? clamp((it.d - I.hi) / Math.max(8, 100 - I.hi), 0, 1) : 0;
         const hot = it.d >= I.lo && it.d <= I.hi;
         fit(frI, Math.max(m, hot ? 1 : m), over ? `brightness(${1 - 0.72 * over}) sepia(${0.25 + 0.5 * over}) saturate(${1.1 - 0.7 * over})` : hot ? 'saturate(1.25) brightness(1.05)' : '');
@@ -2149,7 +2175,7 @@ function drawSlot(i, net, now, cid) {
     else if (fim) { ctx.save(); ctx.filter = it.d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${1.25 - 0.55 * k}) saturate(${0.7 + 0.5 * k})`; ctx.drawImage(fim, cx - s / 2, cy - s / 2, s, s); ctx.restore(); }
     else { ctx.fillStyle = I.color; ctx.beginPath(); ctx.arc(cx, cy, s / 3, 0, 7); ctx.fill(); }
   });
-  drawFryLife(x, y, w, h, net, now);
+  drawFryLife(x, y, w, h, net, now, b);
   if (b.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.55, b.flash * 1.6); ctx.fillStyle = '#fff2b0'; rr(x, y, w, h, 10); ctx.fill(); ctx.restore(); }
   const who = railCustomers().findIndex(cu => net[0] && cu.id === net[0].cid);
   if (who >= 0) { ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][who]; rr(x + 6, y + 6, 18, 16, 4); ctx.fill(); text(String(who + 1), x + 15, y + 14, 12, '#fff', 'center'); }
@@ -2178,10 +2204,16 @@ function shaker(id, x, y, label, body, cap, on, en) {
   if (jar) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(jar, -37, -26, 74, 52);
+    const tint = id === 'spicy' ? 'rgba(176,36,22,0.62)' : id === 'basil' ? 'rgba(36,110,42,0.62)' : 'rgba(255,248,230,0.7)';
+    ctx.fillStyle = tint;
+    ctx.fillRect(-14, -2, 28, 16);
     ctx.globalAlpha = 1;
     const parts = label.split(' ');
-    text(parts[0], 0, -2, 11, '#3a2416', 'center');
-    if (parts[1]) text(parts[1], 0, 12, 10, '#5a3a12', 'center');
+    ctx.font = `16px ${FONT}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3; ctx.strokeStyle = '#1a0d05';
+    ctx.strokeText(parts[0], 0, -8); ctx.fillStyle = '#fff6e4'; ctx.fillText(parts[0], 0, -8);
+    if (parts[1]) { ctx.font = `14px ${FONT}`; ctx.strokeText(parts[1], 0, 14); ctx.fillStyle = '#ffd166'; ctx.fillText(parts[1], 0, 14); }
   } else {
   ctx.fillStyle = cap; rr(-10, -20, 20, 9, 3); ctx.fill(); // 蓋
   ctx.fillStyle = '#d9dde2'; rr(-11, -12, 22, 4, 1); ctx.fill();
@@ -2604,7 +2636,6 @@ function drawShop(time) {
   });
   btn('nextNight', 980, 630, 240, 56, L(`再撐一週 → 進貨`, `Another week → stock`), A.nextNight, { size: 18 });
   if (G.cash >= STALL_PRICE) btn('buyStall', 700, 630, 260, 56, L(`買下攤位 $${STALL_PRICE}`, `Buy stall $${STALL_PRICE}`), A.buyStall, { size: 18, color: '#8a5a10' });
-  else text(L(`買斷還差 $${Math.max(0, STALL_PRICE - Math.round(G.cash))}`, `$${Math.max(0, STALL_PRICE - Math.round(G.cash))} short of the buyout`), 48, 662, 16, '#ffd59a', 'left', 'normal');
 }
 
 function drawResults(time) {
@@ -2628,8 +2659,9 @@ function drawResults(time) {
   if (G.debt) text(L(`欠款 $${G.debt}（第 ${G.debtStrikes} 週）`, `Debt $${G.debt} (week ${G.debtStrikes})`), 560, 422, 16, '#ff6b6b', 'right');
   else text(G.cash >= STALL_PRICE ? L('夠付買斷價', 'Buyout ready') : L(`買斷還差 $${STALL_PRICE - Math.round(G.cash)}`, `$${STALL_PRICE - Math.round(G.cash)} to buyout`), 560, 422, 16, G.cash >= STALL_PRICE ? '#b7f5c5' : '#ffd59a', 'right');
   const spoilTxt = (G.spoiledList || []).map(x => Array.isArray(x) ? `${NM(x[0])}×${x[1]}` : x).join(L('、', ', ')) || L('無', 'none');
-  text(L(`沒賣完報廢：${spoilTxt}${s.spoil ? `（損失 $${s.spoil}）` : ''}`, `Spoiled: ${spoilTxt}${s.spoil ? ` (−$${s.spoil})` : ''}`), 170, 456, 15, '#ffb703', 'left', 'normal');
-  text(L(`鍋裡／盤上浪費 $${s.waste} · 缺貨流失 ${s.oos} 位`, `Wasted in the oil $${s.waste} · ${s.oos} walked, out of stock`), 170, 482, 15, '#aa8877', 'left', 'normal');
+  const spoilLine = L(`沒賣完報廢：${spoilTxt}${s.spoil ? `（損失 $${s.spoil}）` : ''}`, `Spoiled: ${spoilTxt}${s.spoil ? ` (−$${s.spoil})` : ''}`);
+  wrap(spoilLine, 170, 448, 430, 15, '#ffb703', 18);
+  text(oneLine(L(`鍋裡／盤上浪費 $${s.waste} · 缺貨流失 ${s.oos} 位`, `Wasted in the oil $${s.waste} · ${s.oos} walked, out of stock`), 430, 15), 170, 492, 15, '#aa8877', 'left', 'normal');
   const gradeCol = { S: '#ffd166', A: '#06d6a0', B: '#9ad1ff', C: '#ff6b6b' }[s.grade] || '#fff';
   text(s.grade, 210, 528, 48, gradeCol, 'center');
   const note = {
@@ -2715,6 +2747,8 @@ function drawBoon() {
     if (IMG.boon_card) {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(IMG.boon_card, x, y, w, h);
+      ctx.fillStyle = '#f4e6c8';
+      rr(x + 28, y + 28, w - 56, h - 108, 8); ctx.fill();
     } else {
       ctx.fillStyle = '#f6ecd4'; rr(x, y, w, h, 16); ctx.fill();
       ctx.strokeStyle = '#4a2c18'; ctx.lineWidth = 6; rr(x, y, w, h, 16); ctx.stroke();
@@ -2760,7 +2794,7 @@ function drawFx() {
   (G.bills || []).forEach(() => {
     if (drag && drag.type === 'bill') return;
     const b = billAnchor();
-    const x = b.x, y = b.y, amt = G.pay ? G.pay.offer + (G.pay.tip || 0) : 0;
+    const x = b.x, y = b.y, amt = G.pay ? G.pay.offer : 0;
     ctx.fillStyle = '#e7f8d8'; rr(x - 50, y - 30, 100, 60, 8); ctx.fill();
     ctx.strokeStyle = '#2f6b3a'; ctx.lineWidth = 2; ctx.stroke();
     text(`$${amt}`, x, y, 22, '#14532d', 'center');
@@ -2794,7 +2828,7 @@ function drawFx() {
     else if (drag.type === 'basket') (G.fryer[drag.i] || []).forEach((it, j) => foodIcon(it.key, drag.x - 16 + j * 20, drag.y, 40, it.d > 30));
     else if (drag.type === 'plate') G.plate.forEach((it, j) => foodIcon(it.key, drag.x - 20 + (j % 4) * 22, drag.y + Math.floor(j / 4) * 22, 34, true));
     else if (drag.type === 'rack' && G.rack[drag.i]) G.rack[drag.i].items.forEach((it, j) => foodIcon(it.key, drag.x + j * 16, drag.y, 30, true));
-    else if (drag.type === 'bill' && G.pay) text(`$${G.pay.offer + (G.pay.tip || 0)}`, drag.x, drag.y, 24, '#ffd166', 'center');
+    else if (drag.type === 'bill' && G.pay) text(`$${G.pay.offer}`, drag.x, drag.y, 24, '#ffd166', 'center');
     ctx.restore();
   }
   if (G.night === 1 && G.coach && G.stats.served < 3 && G.phase === 'open' && !drag && G.counter && G.counter.handed && !G.pay) {
