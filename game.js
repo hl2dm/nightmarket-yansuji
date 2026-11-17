@@ -2,10 +2,10 @@
 (() => {
 'use strict';
 const cv = document.getElementById('game');
-const ctx = cv.getContext('2d');
+const ctx = cv.getContext('2d', { alpha: false });
 cv.style.cursor = 'none';
-const W = 1280, H = 720; // 版面座標(邏輯單位);v3.7 實際以 2560×1440(×DPR)繪製
-const RES = 2; // 2K:1 版面單位 = 2 像素
+const W = 1280, H = 720; // 版面座標。畫布跟視窗走，不再強制 2560。
+const MAX_BUF = 1920;
 function stageSize() {
   const vv = window.visualViewport;
   const vw = document.fullscreenElement ? (document.fullscreenElement.clientWidth || window.innerWidth) : (vv ? vv.width : window.innerWidth);
@@ -21,7 +21,9 @@ function fitCanvas() {
   cv.style.width = cw + 'px';
   cv.style.height = ch + 'px';
   cv.style.margin = '0';
-  const dpr = window.devicePixelRatio || 1; const bw = Math.max(W * RES, Math.round(cw * dpr)), bh = Math.round(bw * 9 / 16);
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  let bw = Math.max(1, Math.round(cw * dpr)), bh = Math.max(1, Math.round(ch * dpr));
+  if (bw > MAX_BUF) { bh = Math.max(1, Math.round(bh * MAX_BUF / bw)); bw = MAX_BUF; }
   if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
 }
 function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
@@ -1581,20 +1583,22 @@ function btn(id, x, y, w, h, label, onClick, opt = {}) {
   ctx.save();
   if (board) {
     ctx.save();
-    ctx.filter = !enabled ? 'grayscale(0.7) brightness(0.6)' : down ? 'brightness(0.82)' : hover || opt.on ? 'brightness(1.12)' : 'none';
+    if (!enabled) ctx.globalAlpha = 0.45;
     blitBoard(board, x, y + dy, w, h);
     ctx.restore();
   } else {
     if (!down) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(x + 2, y + 5, w, h, 10); ctx.fill(); }
-    if (opt.pulse && !down) { const q = 0.4 + 0.6 * Math.sin(performance.now() / 260); ctx.shadowColor = '#ffcf6b'; ctx.shadowBlur = 8 + q * 18; }
     ctx.fillStyle = !enabled ? '#4a4040' : opt.on ? '#f4a261' : hover ? lighten(base) : base;
     rr(x, y + dy, w, h, 10); ctx.fill();
     if (down) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; rr(x, y + dy, w, h, 10); ctx.fill(); }
-    ctx.shadowBlur = 0;
     ctx.strokeStyle = hover || opt.on ? '#ffe8a3' : 'rgba(255,230,180,0.28)'; ctx.lineWidth = hover || opt.on ? 3 : 1.5;
     rr(x, y + dy, w, h, 10); ctx.stroke();
+    if (opt.pulse && !down) {
+      ctx.strokeStyle = `rgba(255,207,107,${0.35 + 0.45 * Math.sin(performance.now() / 260)})`;
+      ctx.lineWidth = 3;
+      rr(x - 4, y + dy - 4, w + 8, h + 8, 12); ctx.stroke();
+    }
   }
-  ctx.shadowBlur = 0;
   ctx.font = `normal ${opt.size || 18}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const labelText = tr(label);
   if (board) { ctx.lineWidth = 3; ctx.strokeStyle = '#2b1a0e'; ctx.strokeText(labelText, x + w / 2, y + dy + h / 2 + 1); ctx.fillStyle = enabled ? '#fff6e4' : '#c8b8a4'; }
@@ -1981,7 +1985,7 @@ function drawPerson(c, x, scale = 1, mood = null, y = 400) {
   if (!im) return;
   const bob = Math.sin(performance.now() / 300 + c.id) * 2; const h = 150 * s, w = im.width / im.height * h;
   ctx.save(); ctx.imageSmoothingEnabled = false;
-  if (mood < 0.3) ctx.filter = 'sepia(0.4) saturate(1.4) hue-rotate(-15deg)';
+  if (mood < 0.3) { ctx.globalAlpha = 0.35; ctx.fillStyle = '#6a2018'; }
   ctx.drawImage(im, x - w / 2, y - h + bob + 4, w, h); ctx.restore();
   if (mood < 0.3) text('!', x + w / 2 - 8, y - h + 16, 18, '#ff6b6b', 'center');
 }
@@ -1992,7 +1996,6 @@ function drawBust(c, x, y, w, h, moving) {
   ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
   ctx.imageSmoothingEnabled = false;
   const ratio = (c.patience || 1) / Math.max(1, c.max || 1);
-  if (ratio < 0.3) ctx.filter = 'sepia(0.45) saturate(1.35) hue-rotate(-14deg)';
   // ~70% of the old width-fill. Chest sits on the counter lip; waist is under it.
   const scale = w * 0.602 / im.width;
   const dw = Math.round(im.width * scale), dh = Math.round(im.height * scale);
@@ -2002,6 +2005,11 @@ function drawBust(c, x, y, w, h, moving) {
   const chest = BUST_CHEST;
   const lip = counterDest().lipY;
   ctx.drawImage(im, Math.round(x + (w - dw) / 2), Math.round(lip - dh * chest + bob), dw, dh);
+  if (ratio < 0.3) {
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#6a2018';
+    ctx.fillRect(x, y, w, h);
+  }
   ctx.restore();
 }
 function blitCover(im, x, y, w, h) {
@@ -2022,8 +2030,8 @@ function chip(key, x, y, d = null, w = 92, h = 34, it = null) {
   if (im) {
     ctx.fillStyle = 'rgba(30,15,6,0.55)'; rr(x, y, w, h, 8); ctx.fill();
     const k = d === null ? 0 : clamp(d / 100, 0, 1);
-    ctx.save(); if (d !== null) ctx.filter = d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${1.35 - 0.7 * k}) saturate(${0.6 + 0.6 * k})`;
-    const s2 = h - 2; ctx.drawImage(im, x + 2, y + 1, s2, s2); ctx.restore();
+    const s2 = h - 2; ctx.drawImage(im, x + 2, y + 1, s2, s2);
+    if (d !== null && k > 0.45) { ctx.globalAlpha = d >= 100 ? 0.55 : (k - 0.45) * 0.35; ctx.fillStyle = '#1a100c'; ctx.fillRect(x + 2, y + 1, s2, s2); ctx.globalAlpha = 1; }
     text(I.name, x + s2 + 4 + (w - s2 - 4) / 2, y + h / 2, 14, '#fff8e7', 'center');
     return;
   }
@@ -2181,8 +2189,9 @@ function customerRowCanvas(theme) {
 function drawCustomerRow(time, theme) {
   if (IMG.counterBg) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    if (theme === 'blackout' && !has('generator')) ctx.filter = 'brightness(0.35)';
-    ctx.drawImage(IMG.counterBg, 0, 42, 1280, 244); ctx.restore();
+    ctx.drawImage(IMG.counterBg, 0, 42, 1280, 244);
+    if (theme === 'blackout' && !has('generator')) { ctx.fillStyle = 'rgba(2,4,12,0.62)'; ctx.fillRect(0, 42, 1280, 244); }
+    ctx.restore();
   } else ctx.drawImage(customerRowCanvas(theme), 0, 0);
   const P = STRIP_PAL[theme] || STRIP_PAL.fair, [lr, lg, lb] = P.lamp;
   const dark = theme === 'blackout' && !has('generator');
@@ -2476,8 +2485,9 @@ function drawTank() {
   const X = F.x, Y = F.y, TW = F.w, TH = F.h;
   if (IMG.fryerBody) {
     ctx.save(); ctx.imageSmoothingEnabled = false;
-    if (old) ctx.filter = 'brightness(0.65) sepia(0.4)';
-    ctx.drawImage(IMG.fryerBody, X, Y, TW, TH); ctx.restore();
+    ctx.drawImage(IMG.fryerBody, X, Y, TW, TH);
+    if (old) { ctx.fillStyle = 'rgba(40,22,6,0.38)'; ctx.fillRect(X, Y, TW, TH); }
+    ctx.restore();
   } else {
   ctx.fillStyle = '#5c6168'; rr(X, Y, TW, TH, 12); ctx.fill();
   ctx.fillStyle = '#8d949c'; rr(X + 4, Y + 4, TW - 8, 8, 3); ctx.fill();
@@ -2637,14 +2647,16 @@ function drawSlot(i, net, now, cid) {
     const I = ITEMS[it.key];
     const s = multi ? 48 : big ? 88 : 34, cx = x + 6 + cw * (multi ? j % 2 : j) + cw / 2, cy = y + (multi ? h * 0.38 + Math.floor(j / 2) * (h * 0.36) : h * 0.46);
     const rawI = IMG['raw_' + it.key], frI = IMG['fr_' + it.key], fim = IMG['f_' + (IMG_ALIAS[it.key] || it.key)], k = clamp(it.d / 100, 0, 1);
-    const fit = (im, a, flt) => { if (!im) return; ctx.save(); ctx.globalAlpha = a; if (flt) ctx.filter = flt; blitFood(im, cx - s / 2, cy - s / 2, s, s, false); ctx.restore(); };
-    if (rawI && frI) { if (it.d >= 100) fit(IMG.burnt || frI, 1, IMG.burnt ? '' : 'brightness(0.2)');
-      else { const m = clamp((it.d - I.lo * 0.92) / Math.max(4, I.lo * 0.08), 0, 1); fit(rawI, 1, 'saturate(0.75) brightness(0.92)'); if (m > 0) {
+    const fit = (im, a) => { if (!im) return; ctx.save(); ctx.globalAlpha = a; blitFood(im, cx - s / 2, cy - s / 2, s, s, false); ctx.restore(); };
+    const scorch = (amt) => { if (amt < 0.04) return; ctx.save(); ctx.globalAlpha = Math.min(0.62, amt); ctx.fillStyle = '#140e0a'; ctx.beginPath(); ctx.arc(cx, cy, s * 0.42, 0, 7); ctx.fill(); ctx.restore(); };
+    if (rawI && frI) { if (it.d >= 100) { fit(IMG.burnt || frI, 1); if (!IMG.burnt) scorch(0.7); }
+      else { const m = clamp((it.d - I.lo * 0.92) / Math.max(4, I.lo * 0.08), 0, 1); fit(rawI, 1); if (m > 0) {
         const over = it.d > I.hi ? clamp((it.d - I.hi) / Math.max(8, 100 - I.hi), 0, 1) : 0;
         const hot = it.d >= I.lo && it.d <= I.hi;
-        fit(frI, Math.max(m, hot ? 1 : m), over ? `brightness(${1 - 0.72 * over}) sepia(${0.25 + 0.5 * over}) saturate(${1.1 - 0.7 * over})` : hot ? 'saturate(1.25) brightness(1.05)' : '');
+        fit(frI, Math.max(m, hot ? 1 : m));
+        scorch(over * 0.7);
       } } }
-    else if (fim) { ctx.save(); ctx.filter = it.d >= 100 ? 'brightness(0.18) grayscale(1)' : `brightness(${1.25 - 0.55 * k}) saturate(${0.7 + 0.5 * k})`; ctx.drawImage(fim, cx - s / 2, cy - s / 2, s, s); ctx.restore(); }
+    else if (fim) { ctx.drawImage(fim, cx - s / 2, cy - s / 2, s, s); scorch(it.d >= 100 ? 0.72 : Math.max(0, k - 0.55) * 0.5); }
     else { ctx.fillStyle = I.color; ctx.beginPath(); ctx.arc(cx, cy, s / 3, 0, 7); ctx.fill(); }
   });
   drawFryLife(x, y, w, h, net, now, b);
@@ -3519,9 +3531,7 @@ function drawBoon() {
 function drawEnding(time) {
   drawBackground(time, 'stall_front');
   ctx.fillStyle = 'rgba(10,5,3,0.84)'; rr(160, 110, 960, 500, 20); ctx.fill();
-  ctx.shadowColor = '#ff5a36'; ctx.shadowBlur = 18;
   text(L('這攤是你的了', 'The stall is yours'), 640, 190, 44, '#ffcf6b', 'center');
-  ctx.shadowBlur = 0;
   wrap(L(`$${STALL_PRICE} 交給房東。招牌還掛在夜市，下週起不用再扣房租。`, `$${STALL_PRICE} to the landlord. The sign stays up. No rent from next week.`), 220, 250, 840, 20, '#f3e6d0', 32);
   text(L(`撐了 ${G.night} 週 · 買完還剩 $${Math.round(G.cash)} · 口碑 ${Math.round(G.rep)}`, `${G.night} weeks · $${Math.round(G.cash)} left · rep ${Math.round(G.rep)}`), 640, 360, 18, '#ffd59a', 'center', 'normal');
   const gear = (G.upgrades || []).map(id => { const u = UPGRADES.find(x => x.id === id); return u ? L(u.name, u.en || u.name) : id; }).join(L('、', ', '));
@@ -3704,9 +3714,10 @@ function drawVol() {
   text(L('點外面或再按喇叭關閉。M 鍵靜音。', 'Click outside to close. M mutes.'), x + 24, y + 322, 13, '#e7d7c3');
 }
 
+let vignette = null;
 function render(time) {
   buttons = [];
-  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'low';
   ctx.save();
   if (G.shake > 0) ctx.translate(rand(-6, 6) * G.shake * 4, rand(-4, 4) * G.shake * 4);
   if (G.phase === 'title') drawTitle(time);
@@ -3731,9 +3742,15 @@ function render(time) {
   }
   drawVol();
   if (!G.forkOpen && !G.settings) G.popups.forEach(p => { ctx.globalAlpha = clamp(p.life, 0, 1); text(p.text, p.x, p.y, p.size || 24, p.color, 'center'); ctx.globalAlpha = 1; });
-  // 暈影
-  const vg = ctx.createRadialGradient(640, 360, 300, 640, 360, 800); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.45)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  if (!vignette) {
+    vignette = document.createElement('canvas');
+    vignette.width = W; vignette.height = H;
+    const g = vignette.getContext('2d');
+    const vg = g.createRadialGradient(640, 360, 300, 640, 360, 800);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.45)');
+    g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  }
+  ctx.drawImage(vignette, 0, 0, W, H);
   if (G.veil > 0.02) { ctx.fillStyle = `rgba(6,3,1,${G.veil})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
   drawCursor();
