@@ -25,7 +25,7 @@ function loadMix() {
 }
 function saveMix() { try { localStorage.setItem('yansuji_vol', JSON.stringify(mix)); } catch (e) {} }
 loadMix();
-let ac = null, master = null, busFry = null, busUi = null, bed = null;
+let ac = null, master = null, busFry = null, busUi = null, bed = null, music = null;
 const buf = {};
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -43,6 +43,7 @@ function applyGains() {
   master.gain.setTargetAtTime(mix.muted ? 0 : mix.master / 100, t, 0.03);
   if (busFry) busFry.gain.setTargetAtTime(mix.fry / 100, t, 0.03);
   if (busUi) busUi.gain.setTargetAtTime(mix.ui / 100, t, 0.03);
+  if (music) music.volume = mix.muted ? 0 : 0.18 * (mix.master / 100);
 }
 function init() {
   if (ac || HEADLESS) return;
@@ -58,6 +59,17 @@ function init() {
   master.connect(ac.destination);
   applyGains();
   const e = ext(); NAMES.forEach(n => load(n, e));
+  startMusic();
+}
+function startMusic() {
+  if (music) return;
+  const a = new Audio(DIR + 'market_rain.mp3');
+  a.loop = true;
+  a.preload = 'auto';
+  a.volume = mix.muted ? 0 : 0.18 * (mix.master / 100);
+  const p = a.play();
+  if (p && p.catch) p.catch(() => {});
+  music = a;
 }
 function startBed() {
   if (bed || !buf.fry_loop_a || !buf.fry_loop_b) return;
