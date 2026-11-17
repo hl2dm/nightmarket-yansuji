@@ -14,7 +14,7 @@ function fitCanvas() {
 }
 fitCanvas(); window.addEventListener('resize', fitCanvas);
 const params = new URLSearchParams(location.search);
-const FONT = '"NightMarketPixel","WenQuanYi Zen Hei","Noto Sans CJK TC","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
+const FONT = '"WenQuanYi Zen Hei","Noto Sans CJK TC","PingFang TC","Microsoft JhengHei",sans-serif';
 
 // ---------- 亂數 ----------
 let seed = +(params.get('seed') || (Date.now() % 100000));
@@ -1424,11 +1424,16 @@ function billAnchor() {
   return { x: 1124, y: 220 };
 }
 function cashboxRect() { return { x: 988, y: 640, w: 272, h: 48 }; }
+function rackFrame() {
+  const w = 636, h = Math.round(w * ART_ANCHORS.rack.src[1] / ART_ANCHORS.rack.src[0]);
+  return { x: 328, y: 526, w, h };
+}
 function rackRect(i) {
-  const F = fryFrame();
-  const s = cellRect({ col: Math.min(3, i), s: 'L', sub: 0 });
-  const spill = Math.max(0, i - 3);
-  return { x: s.x + spill * 8, y: F.y + F.h + 12 + spill * 4, w: s.w, h: 88 };
+  const f = rackFrame();
+  const b = ART_ANCHORS.rack.boards[Math.min(3, i)];
+  const x0 = f.x + f.w * b[0], x1 = f.x + f.w * b[1], bw = x1 - x0;
+  const nw = bw * 0.88, nh = Math.min(f.h * 0.7, nw * 0.52);
+  return { x: x0 + (bw - nw) / 2, y: f.y + (f.h - nh) / 2, w: nw, h: nh };
 }
 function overFryer(p) { const F = fryFrame(); return p.x > F.x && p.x < F.x + F.w && p.y > F.y && p.y < F.y + F.h; }
 const CHROME = /^(temp_|oil$|vol|lang|report|swap|send|pay|dump|refuse|up_|buy_|unbuy_|start|continue|newRun|open|next|toShop|bag)/;
@@ -1829,7 +1834,7 @@ function drawCustomerRow(time, theme) {
 function drawScene(time) {
   drawCustomerRow(time, G.theme || 'fair');
   ctx.fillStyle = 'rgba(14,8,5,0.97)'; ctx.fillRect(0, STRIP.y1, W, H - STRIP.y1);
-  drawNotebook(1112, 248);
+  drawNotebook(1104, 48);
   drawRail();
   G.walkers.forEach(w => {
     const b = bustSlot();
@@ -1980,11 +1985,15 @@ function countEnts(keys, st) { const m = countBy(keys); return Object.keys(m).ma
 // ---------- 左欄:食材、油溫、換油、熟客筆記 ----------
 function drawLeft() {
   panel(8, 292, 300, 420, IMG.glassCase ? '' : L('展示櫃', 'Case'));
-  if (IMG.glassCase) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.glassCase, 10, 300, 296, 356); ctx.restore(); }
-  const page = casePageKeys();
-  if (page.pages > 1) {
-    btn('casePrev', 16, 304, 32, 26, '‹', () => { G.casePage = (page.page + page.pages - 1) % page.pages; }, { size: 16 });
-    btn('caseNext', 262, 304, 32, 26, '›', () => { G.casePage = (page.page + 1) % page.pages; }, { size: 16 });
+  if (IMG.glassCase) {
+    const f = caseFrame();
+    ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.glassCase, f.x, f.y, f.w, f.h); ctx.restore();
+    const page = casePages();
+    if (page.pages.length > 1) page.pages.forEach((p, i) => {
+      const same = page.pages.filter(q => q.kind === p.kind);
+      const lab = (p.kind === 'meat' ? L('肉', 'Meat') : L('菜', 'Veg')) + (same.length > 1 ? same.indexOf(p) + 1 : '');
+      btn('caseTab' + i, f.x + i * 58, f.y - 26, 54, 22, lab, () => { G.casePage = i; }, { on: i === page.page, size: 14, color: p.kind === 'meat' ? '#7a3c12' : '#2f5a34' });
+    });
   }
   else {
   text(L('肉', 'Meat'), 200, 312, 14, '#ffb067', 'right');
@@ -2002,20 +2011,21 @@ function drawLeft() {
     const q = k === 'byo' ? 1 : stockOf(k);
     btn('item_' + k, bx, by, tw, th, '', () => A.drop(k), { bare: !!IMG.glassCase, color: meat ? '#7a3c12' : '#2f5a34', enabled: q > 0 });
     ctx.save(); ctx.beginPath(); ctx.rect(bx + 1, by + 1, tw - 2, th - 2); ctx.clip();
-    const fim = foodImg(k, false), tight = th < 40, isz = th >= 58 ? 42 : th >= 44 ? 32 : tight ? 20 : 26;
-    if (fim) blitFood(fim, bx + 2, by + (th - isz) / 2, isz, isz, true);
-    const tx = bx + (fim ? isz + 4 : 6);
+    const fim = foodImg(k, false), isz = Math.min(36, Math.max(24, th - 10));
+    const ix = bx + 3, iy = by + th - isz - 2;
+    if (fim) blitFood(fim, ix, iy, isz, isz, true);
+    const tx = ix + (fim ? isz + 3 : 4);
     const v = G.inv[k] || { old: 0 };
     const short = q <= 0;
-    const nameMax = Math.max(24, tw - (tx - bx) - 4);
+    const nameMax = Math.max(24, bx + tw - tx - 4);
     const nm = NM(k);
-    const ns = fitSize(nm, nameMax, tight ? 12 : 16, 10);
-    const nameY = by + th * (tight ? 0.32 : 0.36);
-    const priceY = by + th - (tight ? 8 : 12);
+    const ns = 14;
+    const nameY = by + th * 0.36;
+    const priceY = by + th * 0.68;
     ctx.font = `normal ${ns}px ${FONT}`;
     text(ctx.measureText(nm).width <= nameMax ? nm : oneLine(nm, nameMax, ns), tx, nameY, ns);
-    const priceSize = tight ? 10 : 12;
-    if (short && k !== 'byo') text(oneLine(G.rescueUsed ? L('沒了', 'Out') : L(`缺貨 · 補貨 $${rescueCost(k)}`, `Out · restock $${rescueCost(k)}`), nameMax, priceSize), tx, priceY, priceSize, '#ffb4a8');
+    const priceSize = 14;
+    if (short && k !== 'byo') text(oneLine(G.rescueUsed ? L('沒了', 'Out') : L(`表弟 $${rescueCost(k)}`, `Cousin $${rescueCost(k)}`), nameMax, priceSize), tx, priceY, priceSize, '#ffb4a8');
     else {
       const stock = k === 'byo' ? '' : (v.old ? L(`剩${q} 舊${v.old}`, `${q} left, ${v.old} old`) : L(`剩${q}`, `${q} left`));
       const price = `$${salePrice(k)}`;
@@ -2093,8 +2103,19 @@ function drawTank() {
   }
   const cid = G.counter && !G.pay ? G.counter.id : -1;
   for (let i = 0; i < G.fryer.length; i++) if (!G.baskets[i].locked) drawSlot(i, G.fryer[i], now, cid);
+  G.baskets.forEach((b, i) => {
+    if (!b.locked) return;
+    const r = slotRect(i);
+    ctx.fillStyle = 'rgba(28,18,10,0.78)'; rr(r.x + 2, r.y + 2, r.w - 4, r.h - 4, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(160,120,70,0.45)'; ctx.stroke();
+  });
   ctx.save();
-  if (IMG.rackBoard) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.rackBoard, 328, 512, 636, 196); }
+  const rf = rackFrame();
+  if (IMG.rackBoard) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.rackBoard, rf.x, rf.y, rf.w, rf.h); }
+  if (rf.y + rf.h < 712) {
+    ctx.fillStyle = '#3a2214'; ctx.fillRect(rf.x, rf.y + rf.h, rf.w, 712 - rf.y - rf.h);
+    ctx.fillStyle = '#6b4226'; ctx.fillRect(rf.x, rf.y + rf.h, rf.w, 5);
+  }
   const netI = IMG.smallNet || IMG.basketTop;
   for (let i = 0; i < 4; i++) {
     const box = rackRect(i);
@@ -2191,6 +2212,8 @@ function drawSlot(i, net, now, cid) {
   if (burnt) { ctx.strokeStyle = 'rgba(20,20,20,0.85)'; ctx.lineWidth = 4; rr(x, y, w, h, 10); ctx.stroke(); }
   else if (ready) {
     ctx.strokeStyle = `rgba(255,210,90,${0.45 + 0.45 * Math.sin(now * 7)})`; ctx.lineWidth = 4; rr(x, y, w, h, 10); ctx.stroke();
+    ctx.fillStyle = 'rgba(18,36,12,0.92)'; rr(x + w / 2 - 28, y - 28, 56, 22, 4); ctx.fill();
+    text(L('剛好', 'Perfect'), x + w / 2, y - 17, 14, '#b7f5c5', 'center');
     ctx.fillStyle = 'rgba(70,32,6,0.88)'; ctx.beginPath(); ctx.arc(x + w - 18, y + h - 18, 13, 0, 7); ctx.fill();
     text(L('撈', 'UP'), x + w - 18, y + h - 18, 14, '#ffe08a', 'center');
   }
@@ -2208,9 +2231,7 @@ function shaker(id, x, y, label, body, cap, on, en) {
   if (!en) ctx.globalAlpha = 0.45;
   if (jar) {
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(jar, -16, -16, 32, 32);
-    ctx.fillStyle = body;
-    ctx.fillRect(-8, 0, 16, 8);
+    ctx.drawImage(jar, -22, -28, 44, 48);
   } else {
     ctx.fillStyle = cap; rr(-10, -16, 20, 8, 3); ctx.fill();
     ctx.fillStyle = body; rr(-9, -4, 18, 16, 3); ctx.fill();
@@ -2251,10 +2272,13 @@ function drawRight() {
       text(L('空盤', 'Empty'), well.x + well.w / 2, well.y + well.h / 2, 14, 'rgba(60,40,20,0.45)', 'center');
     }
     G.plate.forEach((it, i) => {
-      const per = 4, sz = 44, bx = X + 10 + (i % per) * 64, by = well.y + 10 + Math.floor(i / per) * 50;
-      if (by + sz > well.y + well.h - 4) return;
+      const n = G.plate.length, cols = Math.min(4, n), rows = Math.ceil(n / cols);
+      const sz = n > 4 ? 34 : 42, gap = 4;
+      const gw = cols * sz + (cols - 1) * gap, gh = rows * sz + (rows - 1) * gap;
+      const ox = well.x + (well.w - gw) / 2, oy = well.y + (well.h - gh) / 2;
+      const c0 = i % cols, r0 = Math.floor(i / cols);
+      const bx = ox + c0 * (sz + gap), by = oy + r0 * (sz + gap);
       const [lab] = doneLabel(it);
-      ctx.fillStyle = 'rgba(30,15,6,0.55)'; rr(bx, by, sz + 2, sz + 2, 6); ctx.fill();
       if (it.d >= 100 && IMG.burnt) { const im = IMG.burnt, sc = sz / Math.max(im.width, im.height); ctx.drawImage(im, bx + 1 + sz / 2 - im.width * sc / 2, by + 1 + sz / 2 - im.height * sc / 2, im.width * sc, im.height * sc); }
       else foodIcon(it.key, bx + 1 + sz / 2, by + 1 + sz / 2, sz, it.d >= ITEMS[it.key].lo * 0.6);
       const mx = bx + sz - 2, my = by + 6;
@@ -2355,31 +2379,54 @@ function bagBlock() {
 }
 // v43:提示 = 圖示序列(seq)+ 短字 + 畫面上的彈跳箭頭(tgt)
 // v44:肉類 2 欄大格(112×60),非肉 3 欄小格(74×68)
-function casePageKeys() {
-  const keys = MENU.slice();
-  const per = 6;
-  const pages = Math.max(1, Math.ceil(keys.length / per));
-  const page = ((G.casePage || 0) % pages + pages) % pages;
-  return { keys: keys.slice(page * per, page * per + per), page, pages };
+const ART_ANCHORS = {
+  case: {
+    src: [600, 840],
+    innerX: [44 / 600, 556 / 600],
+    shelves: [
+      { open0: 55 / 840, stand: 294 / 840 },
+      { open0: 307 / 840, stand: 538 / 840 },
+      { open0: 552 / 840, stand: 787 / 840 },
+    ],
+  },
+  rack: {
+    src: [1208, 176],
+    boards: [[14, 279], [318, 583], [624, 889], [928, 1193]].map(([a, b]) => [a / 1208, b / 1208]),
+  },
+};
+function caseFrame() {
+  const h = 328, w = Math.round(h * ART_ANCHORS.case.src[0] / ART_ANCHORS.case.src[1]);
+  return { x: 8 + Math.round((300 - w) / 2), y: 322, w, h };
 }
-function caseSlots() {
-  const shelves = [176 / 840, 424 / 840, 668 / 840];
-  const slots = [];
-  shelves.forEach(t => {
-    const cy = 300 + 356 * t;
-    slots.push({ x: 28, y: cy - 24, w: 120, h: 48 });
-    slots.push({ x: 160, y: cy - 24, w: 120, h: 48 });
-  });
-  return slots;
+function casePages() {
+  const chunk = (arr, kind) => {
+    const out = [];
+    for (let i = 0; i < arr.length; i += 6) out.push({ kind, keys: arr.slice(i, i + 6) });
+    return out;
+  };
+  let pages = chunk(MENU.filter(isMeat), 'meat').concat(chunk(MENU.filter(k => !isMeat(k)), 'veg'));
+  if (!pages.length) pages = [{ kind: 'meat', keys: [] }];
+  const page = ((G.casePage || 0) % pages.length + pages.length) % pages.length;
+  return { pages, page, keys: pages[page].keys };
+}
+function caseCell(i) {
+  const f = caseFrame();
+  const sh = ART_ANCHORS.case.shelves[Math.floor(i / 2)];
+  const col = i % 2;
+  const x0 = f.x + f.w * ART_ANCHORS.case.innerX[0];
+  const x1 = f.x + f.w * ART_ANCHORS.case.innerX[1];
+  const hw = (x1 - x0) / 2;
+  const top = f.y + f.h * sh.open0;
+  const bot = f.y + f.h * sh.stand;
+  return { x: x0 + col * hw, y: top, w: hw, h: bot - top };
 }
 function caseLayout() {
-  const { keys } = casePageKeys();
+  const { keys } = casePages();
   return { meat: keys.filter(isMeat), veg: keys.filter(k => !isMeat(k)), meatY: 340, meatH: 120, vegY: 480, vegH: 140, meatRows: 1, vegRows: 1 };
 }
 function ITEM_RECT(k) {
-  const { keys } = casePageKeys();
-  const i = keys.indexOf(k);
-  return i >= 0 ? caseSlots()[i] : null;
+  const i = casePages().keys.indexOf(k);
+  return i >= 0 ? caseCell(i) : null;
 }
 const ITEM_POS = k => { const r = ITEM_RECT(k) || { x: 16, y: 290, w: 0, h: 0 }; return [r.x + r.w / 2, r.y + r.h / 2]; };
 const BOWL_POS = bi => [14 + bi * 118 + 56, 566];
@@ -2824,12 +2871,14 @@ function drawFx() {
       else if (G.plate.length) { a = [1140, 360]; b = [COUNTER_X, 80]; }
     }
       if (a && b) {
-      const t = (Math.sin(performance.now() / 480) + 1) / 2;
-      const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t - Math.sin(t * Math.PI) * 28;
       ctx.save();
-      ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 22, y + 8); ctx.lineTo(x + 8, y + 22); ctx.closePath(); ctx.stroke();
-      ctx.fillStyle = '#ff9f1c'; ctx.fill();
+      ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      ctx.setLineDash([]);
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      ctx.translate(b[0], b[1]); ctx.rotate(ang);
+      ctx.fillStyle = '#ff9f1c';
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-16, -7); ctx.lineTo(-16, 7); ctx.closePath(); ctx.fill();
       ctx.restore();
     }
   }
