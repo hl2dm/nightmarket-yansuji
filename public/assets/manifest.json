@@ -520,6 +520,60 @@
       "frameWidth": 256,
       "frameHeight": 256,
       "loop": true
+    },
+    {
+      "file": "boon_loud.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
+    },
+    {
+      "file": "boon_cloth.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
+    },
+    {
+      "file": "boon_scale.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
+    },
+    {
+      "file": "boon_iou.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
+    },
+    {
+      "file": "boon_rush.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
+    },
+    {
+      "file": "boon_charm.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
+    },
+    {
+      "file": "boon_saint.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
+    },
+    {
+      "file": "boon_stash.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
+    },
+    {
+      "file": "boon_night.png",
+      "width": 320,
+      "height": 320,
+      "transparent": true
     }
   ],
   "font": {

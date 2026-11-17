@@ -1,0 +1,15 @@
+{
+  "common": "Low saturation hand-painted pixel art, visible square pixel clusters, muted amber/cream highlights, deep teal-gray shadows and rust palette. True transparent background, centered subject about 70 percent of square canvas. No text, digits, UI, card border or watermark.",
+  "subjects": {
+    "loud": "Worn handheld market-vendor megaphone, cream horn, muted red housing, dark teal grip.",
+    "cloth": "Old folded cream oil-filtering cloth, coarse woven fabric, oil stains, frayed corners and threads. Remove background haze, keep only cloth and dangling threads.",
+    "scale": "Traditional market mechanical spring scale, empty steel pan, muted teal body, cream dial with unnumbered ticks and needle.",
+    "iou": "Folded and reopened blank cream IOU paper, fold creases, one red circular abstract ink stamp.",
+    "rush": "Compact gas burner crown, vigorous flame tongues with blue base and warm amber tips, no stove cabinet or pan.",
+    "charm": "One red cord tied into one simple knot, two trailing ends, no beads or pendants.",
+    "saint": "Small aged wooden reputation plaque, entirely blank face, simple beveled wood edges.",
+    "stash": "Round worn metal storage tin, lid fully closed, cream and teal patina, no keyhole or text.",
+    "night": "Crouching dark tabby cat beneath one small hanging warm stall lamp; only cat and lamp, no ground or scenery."
+  },
+  "export": "Trim transparent margins after clearing alpha below 2 percent; nearest-neighbour resize to fit 224x224, center on transparent 320x320 canvas."
+}

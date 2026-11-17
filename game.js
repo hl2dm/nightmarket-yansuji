@@ -149,6 +149,7 @@ const meatCap = () => (typeof has === 'function' && has('bigNet')) ? 6 : MEAT_CA
 ['bigNet','smallNet','fridge','filter','neon','fan','bulk','heatlamp','generator'].forEach(k => loadImg('upg_' + k, `public/assets/upg_${k}.png?v=art3`));
 Object.entries({shaker_salt: 'shaker_salt', shaker_spicy: 'shaker_chili', shaker_basil: 'shaker_basil', steelBowl: 'bowl_steel', glassCase: 'case_glass'}).forEach(([key, file]) => loadImg(key, `public/assets/${file}.png?v=art2`));
 ['btn_wood', 'btn_green', 'btn_red', 'boon_card'].forEach(k => loadImg(k, `public/assets/${k}.png?v=art3`));
+['loud','cloth','scale','iou','rush','charm','saint','stash','night'].forEach(k => loadImg('boon_' + k, `public/assets/boon_${k}.png?v=art5`));
 const sfx = (n, ...a) => { const S = window.SFX; if (S && S[n]) S[n](...a); };
 const foodImg = (k, fried = true) => IMG[(fried ? 'fr_' : 'raw_') + k] || IMG['f_' + (IMG_ALIAS[k] || k)];
 const IMG_ALIAS = { byo: 'mushroom', saltchicken: 'chicken' };
@@ -3289,6 +3290,14 @@ function drawBoon() {
       ctx.strokeStyle = '#4a2c18'; ctx.lineWidth = 6; rr(x, y, w, h, 16); ctx.stroke();
       ctx.fillStyle = tone; rr(x + 18, y + 18, w - 36, 44, 8); ctx.fill();
       text(L(b.tone === 'good' ? '順' : '有代價', b.tone === 'good' ? 'Clean' : 'It costs'), x + 36, y + 40, 14, '#fff8e8', 'left', 'normal');
+    }
+    const boonArt = IMG['boon_' + id];
+    if (boonArt) {
+      const size = IMG.boon_card ? 96 : 44;
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(boonArt, x + (w - size) / 2, y + (IMG.boon_card ? 12 : 64), size, size);
+      ctx.restore();
     }
     text(L(b.zh, b.en), x + w / 2, y + 118, 26, '#3a2416', 'center');
     text(L('得到', 'You get'), x + 36, y + 170, 14, '#2c6b4a', 'left', 'normal');
