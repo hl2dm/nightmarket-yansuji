@@ -2464,7 +2464,7 @@ function drawLeft() {
   text(`${Math.round(G.temp)}°`, 16, ty, 18, G.temp > 182 ? '#ff8f6b' : G.temp < 155 ? '#9ad1ff' : '#ffd166');
   text(`${old ? L('老油', 'OLD') : L('新油', 'fresh')} ${Math.round(G.oilUse)}/${OIL_LIMIT}`, 70, ty, 13, old ? '#ff6b6b' : '#b7e4c7');
   TEMPS.forEach((tp, i) => btn('temp_' + tp.key, 14 + i * 58, ty + 14, 54, 32, L(tp.name, ['Low', 'Mid', 'High'][i]), () => A.setTemp(tp.key), { on: G.tempKey === tp.key, color: '#2a6f6a', size: 14 }));
-  btn('oil', 176, ty + 14, 86, 32, G.oilChange > 0 ? L(`換油${Math.ceil(G.oilChange)}`, `Oil ${Math.ceil(G.oilChange)}`) : `$${oilPrice()}`, A.changeOil, { enabled: !fried().length && G.oilChange <= 0, color: old ? '#8a3030' : '#6b4226', size: 14 });
+  btn('oil', 192, ty + 14, 108, 32, G.oilChange > 0 ? L(`換油 ${Math.ceil(G.oilChange)}`, `Oil ${Math.ceil(G.oilChange)}`) : L(`換油 $${oilPrice()}`, `Oil $${oilPrice()}`), A.changeOil, { enabled: !fried().length && G.oilChange <= 0, color: old ? '#8a3030' : '#6b4226', size: 13 });
 }
 // v41:不鏽鋼鐵盆(俯視,canvas 畫)
 function drawBowl(bi, B, x, y, w, h, cid) {
