@@ -356,7 +356,7 @@ function bustHeadTop(c) {
   const im = c && custImg(c);
   if (!im) return slot.y + 8;
   const dh = im.height * (slot.w * 0.602 / im.width);
-  return counterDest().lipY - dh * 0.46;
+  return counterDest().lipY - dh * BUST_CHEST;
 }
 function drawSpeech(cx, top, lines, dark, alpha, tail) {
   if (!lines.length || alpha < 0.02) return;
@@ -1631,6 +1631,7 @@ function bustSlot() {
   const bottom = Math.round(counterDest().lipY) + 18;
   return { w: g.w - 8, h: bottom - y, y, foodH };
 }
+const BUST_CHEST = 0.54;
 function slotHome(i) { const g = cardGeom(Math.max(0, Math.min(2, i))); return g.x + g.w / 2; }
 function ticketLive(c) { return !!(c && c.arrived && !c.leaving); }
 function ticketRectOf(c) {
@@ -1811,7 +1812,7 @@ cv.addEventListener('pointerdown', e => {
   if ((G.veil || 0) > 0.45) return;
   const p = toCanvas(e);
   if (e.button === 2) return;
-  if (G.settings && !hitR(p, G._settingsRect) && !hitR(p, G._gearRect) && !hitR(p, G._speakRect)) { G.settings = false; return; }
+  if (G.settings && !hitR(p, G._settingsRect) && !hitR(p, G._speakRect)) { G.settings = false; return; }
   const sl = (G._sliders || []).find(s => hitR(p, s));
   if (sl) { dragSlider = sl; setSlider(sl, p.x); return; }
   try { cv.setPointerCapture(e.pointerId); } catch (err) {}
@@ -1998,7 +1999,7 @@ function drawBust(c, x, y, w, h, moving) {
   const bob = moving
     ? Math.sin(performance.now() / 1000 * Math.PI * 2 * 2.5) * 3
     : Math.sin(performance.now() / 320 + (c.id || 0)) * 1;
-  const chest = 0.46;
+  const chest = BUST_CHEST;
   const lip = counterDest().lipY;
   ctx.drawImage(im, Math.round(x + (w - dw) / 2), Math.round(lip - dh * chest + bob), dw, dh);
   ctx.restore();
@@ -3686,12 +3687,9 @@ function drawVol() {
   const muted = !!(S && S.mix().muted);
   G._sliders = [];
   G._speakRect = { x: 1232, y: 4, w: 40, h: 32 };
-  G._gearRect = { x: 1186, y: 4, w: 40, h: 32 };
   const speak = muted ? (IMG.speakerMute || IMG.speaker) : IMG.speaker;
   btn('vol', 1232, 4, 40, 32, speak ? '' : (muted ? L('靜', 'M') : L('聲', 'V')), () => { G.settings = !G.settings; }, { bare: !speak, size: 14 });
   if (speak) { ctx.imageSmoothingEnabled = false; ctx.drawImage(speak, 1236, 4, 32, 32); }
-  btn('gear', 1186, 4, 40, 32, IMG.gear ? '' : L('設', 'Set'), () => { G.settings = !G.settings; }, { bare: !IMG.gear, size: 14 });
-  if (IMG.gear) { ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.gear, 1190, 4, 32, 32); }
   if (!G.settings) { G._settingsRect = null; return; }
   const x = 760, y = 48, w = 460, h = 348;
   G._settingsRect = { x, y, w, h };
