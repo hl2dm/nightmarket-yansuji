@@ -2470,24 +2470,22 @@ function drawLeft() {
     ctx.restore();
     if (mlk.includes(k) && Math.sin(performance.now() / 140) > -0.2) { ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 3; rr(bx - 1, by - 1, tw + 2, th + 2, 8); ctx.stroke(); }
   });
-  const ty = 664, old = G.oilUse > OIL_LIMIT;
-  text(`${Math.round(G.temp)}°`, 16, ty, 18, G.temp > 182 ? '#ff8f6b' : G.temp < 155 ? '#9ad1ff' : '#ffd166');
-  text(`${old ? L('老油', 'OLD') : L('新油', 'fresh')} ${Math.round(G.oilUse)}/${OIL_LIMIT}`, 70, ty, 13, old ? '#ff6b6b' : '#b7e4c7');
-  TEMPS.forEach((tp, i) => btn('temp_' + tp.key, 14 + i * 58, ty + 14, 54, 32, L(tp.name, ['Low', 'Mid', 'High'][i]), () => A.setTemp(tp.key), { on: G.tempKey === tp.key, color: '#2a6f6a', size: 14 }));
-  const ox = 188, oy = ty + 12, ow = 112, oh = 40, changing = G.oilChange > 0;
+  const ty = 664, by = ty + 16, bh = 32, old = G.oilUse > OIL_LIMIT;
+  const changing = G.oilChange > 0;
   const oilOn = !fried().length && !changing;
-  buttons.push({ id: 'oil', x: ox, y: oy, w: ow, h: oh, enabled: oilOn, clickable: oilOn, onClick: A.changeOil });
-  const oilBoard = IMG.btn_red || IMG.btn_wood;
+  const ox = 188, ow = 112;
+  text(L(`油溫 ${Math.round(G.temp)}°`, `Temp ${Math.round(G.temp)}°`), 16, ty, 14, G.temp > 182 ? '#ff8f6b' : G.temp < 155 ? '#9ad1ff' : '#ffd166');
+  text(`${old ? L('老油', 'Old') : L('新油', 'Fresh')} ${Math.round(G.oilUse)}/${OIL_LIMIT}`, ox + ow / 2, ty, 13, old ? '#ff6b6b' : '#b7e4c7', 'center');
+  TEMPS.forEach((tp, i) => btn('temp_' + tp.key, 14 + i * 58, by, 54, bh, L(tp.name, ['Low', 'Mid', 'High'][i]), () => A.setTemp(tp.key), { on: G.tempKey === tp.key, color: '#2a6f6a', size: 14 }));
+  buttons.push({ id: 'oil', x: ox, y: by, w: ow, h: bh, enabled: oilOn, clickable: oilOn, onClick: A.changeOil });
+  const oilBoard = (old ? IMG.btn_red : IMG.btn_wood) || IMG.btn_red || IMG.btn_wood;
   ctx.save();
-  if (oilBoard) blitBoard(oilOn ? oilBoard : tinted(oilBoard, 'grayscale(0.7) brightness(0.6)'), ox, oy, ow, oh);
-  else { ctx.fillStyle = oilOn ? (old ? '#8a3030' : '#6b4226') : '#4a4040'; rr(ox, oy, ow, oh, 8); ctx.fill(); }
+  if (oilBoard) blitBoard(oilOn ? oilBoard : tinted(oilBoard, 'grayscale(0.7) brightness(0.6)'), ox, by, ow, bh);
+  else { ctx.fillStyle = oilOn ? '#6b4226' : '#4a4040'; rr(ox, by, ow, bh, 8); ctx.fill(); }
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = oilOn ? '#fff6e4' : '#c8b8a4';
-  ctx.font = `normal 15px ${FONT}`;
-  ctx.fillText(changing ? L('換油中', 'Changing') : L('換油', 'New oil'), ox + ow / 2, oy + 13);
-  ctx.fillStyle = '#ffd59a';
-  ctx.font = `normal 13px ${FONT}`;
-  ctx.fillText(changing ? String(Math.ceil(G.oilChange)) : ('$' + oilPrice()), ox + ow / 2, oy + 28);
+  ctx.font = `normal 14px ${FONT}`;
+  ctx.fillText(changing ? L(`換油中 ${Math.ceil(G.oilChange)}`, `Wait ${Math.ceil(G.oilChange)}`) : L(`換油 $${oilPrice()}`, `Oil $${oilPrice()}`), ox + ow / 2, by + bh / 2 + 1);
   ctx.restore();
 }
 // v41:不鏽鋼鐵盆(俯視,canvas 畫)
