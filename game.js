@@ -6,13 +6,40 @@ const ctx = cv.getContext('2d');
 cv.style.cursor = 'none';
 const W = 1280, H = 720; // 版面座標(邏輯單位);v3.7 實際以 2560×1440(×DPR)繪製
 const RES = 2; // 2K:1 版面單位 = 2 像素
+function stageSize() {
+  const vv = window.visualViewport;
+  const vw = document.fullscreenElement ? (document.fullscreenElement.clientWidth || window.innerWidth) : (vv ? vv.width : window.innerWidth);
+  const vh = document.fullscreenElement ? (document.fullscreenElement.clientHeight || window.innerHeight) : (vv ? vv.height : window.innerHeight);
+  return { vw, vh };
+}
 function fitCanvas() {
-  const vw = window.innerWidth, vh = window.innerHeight; const cw = Math.min(vw, vh * 16 / 9), ch = cw * 9 / 16;
-  cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+  const { vw, vh } = stageSize();
+  const cw = Math.max(1, Math.min(vw, vh * 16 / 9)), ch = cw * 9 / 16;
+  cv.style.position = 'fixed';
+  cv.style.left = Math.round((vw - cw) / 2) + 'px';
+  cv.style.top = Math.round((vh - ch) / 2) + 'px';
+  cv.style.width = cw + 'px';
+  cv.style.height = ch + 'px';
+  cv.style.margin = '0';
   const dpr = window.devicePixelRatio || 1; const bw = Math.max(W * RES, Math.round(cw * dpr)), bh = Math.round(bw * 9 / 16);
   if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
 }
-fitCanvas(); window.addEventListener('resize', fitCanvas);
+function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function toggleFullscreen() {
+  const root = document.documentElement;
+  if (isFullscreen()) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document);
+    return;
+  }
+  const req = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (req) req.call(root).catch(() => {});
+}
+fitCanvas();
+window.addEventListener('resize', fitCanvas);
+document.addEventListener('fullscreenchange', fitCanvas);
+document.addEventListener('webkitfullscreenchange', fitCanvas);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', fitCanvas);
 const params = new URLSearchParams(location.search);
 const FONT = '"WenQuanYi Zen Hei","Noto Sans CJK TC","PingFang TC","Microsoft JhengHei",sans-serif';
 
@@ -20,6 +47,10 @@ const FONT = '"WenQuanYi Zen Hei","Noto Sans CJK TC","PingFang TC","Microsoft Jh
 let seed = +(params.get('seed') || (Date.now() % 100000));
 function rng() { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
   t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+let chatSeed = 1;
+function chatRng() { chatSeed |= 0; chatSeed = chatSeed + 0x6D2B79F5 | 0; let t = Math.imul(chatSeed ^ chatSeed >>> 15, 1 | chatSeed);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+function resetChatRng() { chatSeed = (seed ^ Math.imul((G && G.night) || 1, 0x9E3779B1) ^ 0xC0FFEE) | 0; }
 const rand = (a, b) => a + rng() * (b - a);
 const pick = a => a[Math.floor(rng() * a.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -106,6 +137,13 @@ loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bo
 ['quiet','lantern','glut','spike','cram','feast','raid','fight','protect','oil','celeb','stockout','rival','crew','parade'].forEach(k => loadImg('news_' + k, `assets/news_${k}.jpg`));
 loadImg('hand', 'assets/hand_boss.png');
 loadImg('cat', 'assets/cat_market.png');
+// 熟度序列圖（橫條）。沒有檔就維持程式畫的泡，檔案到了自動換上。
+loadImg('vfx_burst', 'assets/vfx/vfx_drop_burst.png');
+loadImg('vfx_roll', 'assets/vfx/vfx_boil_steady.png');
+loadImg('vfx_fine', 'assets/vfx/vfx_boil_fine.png');
+loadImg('vfx_burn', 'assets/vfx/vfx_smoke_burnt.png');
+loadImg('vfx_flash', 'assets/vfx/vfx_ready_glint.png');
+loadImg('vfx_smoke', 'assets/vfx/vfx_smoke_wisp.png');
 const meatCap = () => (typeof has === 'function' && has('bigNet')) ? 6 : MEAT_CAP;
 ['bigNet','smallNet','fridge','filter','neon','fan','bulk','heatlamp','generator'].forEach(k => loadImg('upg_' + k, `public/assets/upg_${k}.png?v=art3`));
 Object.entries({shaker_salt: 'shaker_salt', shaker_spicy: 'shaker_chili', shaker_basil: 'shaker_basil', steelBowl: 'bowl_steel', glassCase: 'case_glass'}).forEach(([key, file]) => loadImg(key, `public/assets/${file}.png?v=art2`));
@@ -229,9 +267,9 @@ function jarIcon(id, cx, cy, s, want = true) {
 }
 // 食材圖示 + 數量 + 狀態(self 一般 / need 要你補:橘色脈動 / done 打勾 / short 缺貨)
 let coachDots = {};
-function iconBadge(k, n, cx, cy, s, st = 'self') {
+function iconBadge(k, n, cx, cy, s, st = 'self', mark = false) {
   if (st === 'need') {
-    coachDots[k] = [cx, cy];
+    if (mark) coachDots[k] = [cx, cy];
     ctx.save(); ctx.setLineDash([3, 2]); ctx.strokeStyle = '#ff9f1c'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(cx, cy, s * 0.46, 0, 7); ctx.stroke(); ctx.setLineDash([]);
     ctx.globalAlpha = 0.28 + 0.15 * pulse(5); foodIcon(k, cx, cy, s * 0.8, false); ctx.restore();
@@ -244,8 +282,8 @@ function iconBadge(k, n, cx, cy, s, st = 'self') {
     ctx.strokeText('×' + n, cx + s * 0.55, cy + s * 0.5); ctx.fillStyle = '#fff'; ctx.fillText('×' + n, cx + s * 0.55, cy + s * 0.5); }
 }
 // 一排圖示;ents = [[key, n, state]],回傳寬度
-function iconRow(ents, x, cy, s, gap = 4, maxW = 9999) {
-  let xx = x; ents.forEach(([k, n, st]) => { const w = s + (n > 1 ? s * 0.35 : 0); if (xx + w - x > maxW) return; iconBadge(k, n, xx + s / 2, cy, s, st); xx += w + gap; }); return xx - x;
+function iconRow(ents, x, cy, s, gap = 4, maxW = 9999, mark = false) {
+  let xx = x; ents.forEach(([k, n, st]) => { const w = s + (n > 1 ? s * 0.35 : 0); if (xx + w - x > maxW) return; iconBadge(k, n, xx + s / 2, cy, s, st, mark); xx += w + gap; }); return xx - x;
 }
 // 教學箭頭(上下彈跳)
 function arrowTo(x, y, dir = 'down', col = '#ffd166') {
@@ -288,7 +326,7 @@ function newGame() {
   };
   newNight();
 }
-function newNight() { refreshMenu(G.night);
+function newNight() { refreshMenu(G.night); resetChatRng();
   Object.assign(G, {
     t: 0, dayLen: hasBoon('night') ? 200 : 180, grace: 45, repStart: G.rep, cashStart: G.cash, debtStart: G.debt, endBanner: false, pendingSick: false,
     forkId: '', forkOpen: false, forkFired: false, forkMatch: false, dare: '',
@@ -304,6 +342,7 @@ function newNight() { refreshMenu(G.night);
     streak: 0, cat: { x: -90, dir: 1, nap: 1.5 }, beatCd: 6,
     deal: MENU[Math.floor(rng() * MENU.length)] || 'tempura', rescueUsed: false, newsRead: false,
     ban: '', protectChoice: '', beatFired: {},
+    chatUsed: {}, regLineUsed: false, bubble: null, bubbleNext: null, bubbleGap: 0,
   });
   G.fryer = G.baskets.map(() => []);
   G.rumor = RUMORS[G.rumorId];
@@ -437,7 +476,7 @@ function nightBeats() {
     fire('fight', 4, '巷口還在吵，客人會繞路', 'The fight is still going. Guests detour.', '#ffb4a2');
     if (!G.beatFired.walk && G.t > 6) {
       G.beatFired.walk = 1;
-      const shout = (zh, en, x, dir) => G.walkers.push({ c: { id: -10 - dir, type: 'aunt', look: dir > 0 ? 'aunt' : 'normal', line: zh, lineEn: en, patience: 1, max: 1, angry: true }, x, dir, sayT: 5 });
+  const shout = (zh, en, x, dir) => { const c = { id: -10 - dir, type: 'aunt', look: dir > 0 ? 'aunt' : 'normal', line: zh, lineEn: en, patience: 1, max: 1, angry: true }; G.walkers.push({ c, x, dir }); sayGuestLine(c, zh, en); };
       shout('排隊是我的！', 'That line is mine!', 520, 1);
       shout('你才插隊！', 'You cut in!', 680, -1);
     }
@@ -449,7 +488,8 @@ function nightBeats() {
   if (id === 'oil') fire('oil', 5, `沙拉油這週換要 $${oilPrice()}`, `Oil change is $${oilPrice()} this week`, '#ffb4a2');
   if (id === 'protect' && G.protectChoice === 'refuse' && !G.beatFired.back && G.t > G.dayLen - 30) {
     G.beatFired.back = 1;
-    G.walkers.push({ c: { id: -3, type: 'drunk', look: 'drunk', line: '說好的呢？', lineEn: 'We had a deal.', patience: 1, max: 1, angry: true }, x: 1100, dir: -1, sayT: 6 });
+    const c = { id: -3, type: 'drunk', look: 'drunk', line: '說好的呢？', lineEn: 'We had a deal.', patience: 1, max: 1, angry: true };
+    G.walkers.push({ c, x: 1100, dir: -1 }); sayGuestLine(c, c.line, c.lineEn);
     popup(L(`他回來了。收攤要算 $${Math.round(protectFee() * 1.4)}`, `He is back. Closing costs $${Math.round(protectFee() * 1.4)}`), 640, 160, '#ff6b6b');
     addLog('收保護費的人回來了', 'The man who wanted a cut came back');
   }
@@ -1097,7 +1137,8 @@ function leave(c, line, angry, lineEn) {
   if (typeof line === 'string') { c.line = line; c.lineEn = lineEn || ''; }
   c.angry = angry;
   G.lastLine = { who: c.revealed ? '衛生局稽查員' : CTYPES[c.type].label, whoEn: c.revealed ? 'Inspector' : CTYPES[c.type].en, text: c.line, textZh: c.line, textEn: c.lineEn || '', angry, t: 2.5 };
-  G.walkers.push({ c, x: c.x || COUNTER_X, dir: -1, sayT: 1.8 }); G.counter = null;
+  G.walkers.push({ c, x: c.x || COUNTER_X, dir: -1 }); G.counter = null;
+  sayGuestLine(c, c.line, c.lineEn);
   G.pay = null; G.bills = [];
 }
 
@@ -1188,6 +1229,7 @@ function update(dt) {
     }
     if (c.patience <= 0) { G.stats.lost++; changeRep(-2); addLog(`${CTYPES[c.type].label}等太久,離開了`, `${CTYPES[c.type].en} waited too long and left`); const pl = pickLine('angry', 1); leave(c, pl.zh, true, pl.en); resetPrep(); }
   }
+  tickTalk(dt);
   clipTickets();
   pullRackForCounter();
   if (G.handAnim) { G.handAnim.t += dt / SPEED; if (G.handAnim.t > 0.9) G.handAnim = null; }
@@ -1353,6 +1395,7 @@ function stepGuest(c, home, dt) {
   if (!c.arrived && c.x === home) {
     c.arrived = true;
     if (!c.handed) { handOver(c); sfx('order'); }
+    if (!c.saidA) { c.saidA = true; sayGuestLine(c, c.line, c.lineEn); }
   }
 }
 function hitPad() { return window.innerWidth < 900 ? 16 : 0; }
@@ -1530,6 +1573,7 @@ cv.addEventListener('pointercancel', () => { drag = null; held = null; });
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'm') { sfx('cycleVolume'); return; }
+  if (k === 'f' && G.phase !== 'open') { toggleFullscreen(); return; }
   if (G.phase === 'title' && (k === 'enter' || k === ' ')) { G.hasSave ? A.cont() : A.start(); return; }
   if (G.phase === 'stock' && k === 'enter') { A.open(); return; }
   if (G.phase !== 'open' || G.forkOpen) return;
@@ -1664,14 +1708,15 @@ function drawBust(c, x, y, w, h, moving) {
   ctx.imageSmoothingEnabled = false;
   const ratio = (c.patience || 1) / Math.max(1, c.max || 1);
   if (ratio < 0.3) ctx.filter = 'sepia(0.45) saturate(1.35) hue-rotate(-14deg)';
-  // A touch under full slot width. Waist stays on the clip bottom, under the lip.
-  const scale = w * 0.86 / im.width;
+  // ~70% of the old width-fill. Chest sits on the counter lip; waist is under it.
+  const scale = w * 0.602 / im.width;
   const dw = Math.round(im.width * scale), dh = Math.round(im.height * scale);
   const bob = moving
     ? Math.sin(performance.now() / 1000 * Math.PI * 2 * 2.5) * 3
     : Math.sin(performance.now() / 320 + (c.id || 0)) * 1;
-  const waist = 0.5;
-  ctx.drawImage(im, Math.round(x + (w - dw) / 2), Math.round(y + h - dh * waist + bob), dw, dh);
+  const chest = 0.46;
+  const lip = counterDest().lipY;
+  ctx.drawImage(im, Math.round(x + (w - dw) / 2), Math.round(lip - dh * chest + bob), dw, dh);
   ctx.restore();
 }
 function blitCover(im, x, y, w, h) {
@@ -1889,7 +1934,6 @@ function drawScene(time) {
   G.walkers.forEach(w => {
     const b = bustSlot();
     drawBust(w.c, w.x - b.w / 2, b.y, b.w, b.h, true);
-    if (w.sayT > 0 && w.c && w.c.line) text(oneLine(L(w.c.line, w.c.lineEn || w.c.line), 150, 13), w.x + b.w * 0.28, b.y + 18, 13, '#fff8e7', 'center');
   });
   drawCounterLip();
   drawRail();
@@ -2046,7 +2090,8 @@ function drawLeft() {
       const total = page.pages.length * tw + (page.pages.length - 1) * gap;
       const x0 = f.x + Math.max(0, (f.w - total) / 2);
       page.pages.forEach((p, i) => {
-        btn('caseTab' + i, x0 + i * (tw + gap), f.y - 36, tw, th, L(`第${i + 1}頁`, `Page ${i + 1}`), () => { G.casePage = i; }, { on: i === page.page, size: 16, color: '#6b4226' });
+        const lab = p.kind === 'meat' ? L('肉', 'Meat') : p.kind === 'veg' ? L('菜', 'Veg') : L('肉·菜', 'Meat·Veg');
+        btn('caseTab' + i, x0 + i * (tw + gap), f.y - 36, tw, th, lab, () => { G.casePage = i; }, { on: i === page.page, size: 16, color: '#6b4226' });
       });
     }
   }
@@ -2068,7 +2113,14 @@ function drawLeft() {
     ctx.save(); ctx.beginPath(); ctx.rect(bx + 1, by + 1, tw - 2, th - 2); ctx.clip();
     const fim = foodImg(k, false), isz = Math.min(36, Math.max(24, th - 10));
     const ix = bx + 3, iy = by + th - isz - 2;
-    if (fim) blitFood(fim, ix, iy, isz, isz, true);
+    if (fim) {
+      let ds = isz, ox = 0, oy = 0;
+      if (k === coachFillKey()) {
+        const p = 1 + 0.08 * Math.sin(performance.now() / 500 * Math.PI);
+        ds = isz * p; ox = (isz - ds) / 2; oy = (isz - ds) / 2;
+      }
+      blitFood(fim, ix + ox, iy + oy, ds, ds, true);
+    }
     const tx = ix + (fim ? isz + 3 : 4);
     const v = G.inv[k] || { old: 0 };
     const short = q <= 0;
@@ -2215,6 +2267,18 @@ function drawFryLife(x, y, w, h, net, now, b) {
   const age = b ? (b.age || 0) : 1;
   const burnt = p >= 100;
   const stage = burnt ? 'burn' : p > SH_HI ? 'smoke' : p >= SH_LO ? 'fine' : age < 1.2 ? 'burst' : 'roll';
+  if (stage === 'burst' && blitVfx('burst', x, y, w, h, now, age)) return;
+  if (stage === 'roll' && blitVfx('roll', x, y, w, h, now, age)) return;
+  if (stage === 'fine' && blitVfx('fine', x, y, w, h, now, age)) {
+    if (b && b.flash > 0) blitVfx('flash', x, y, w, h, now, 0.35 - b.flash);
+    return;
+  }
+  if (stage === 'smoke') {
+    const ok = blitVfx('smoke', x, y - 18, w, h, now, age);
+    if (b && b.flash > 0) blitVfx('flash', x, y, w, h, now, 0.35 - b.flash);
+    if (ok) return;
+  }
+  if (stage === 'burn' && blitVfx('burn', x, y - 10, w, h, now, age)) return;
   ctx.save();
   const riseBub = (n, r0, r1, alpha, speed) => {
     const span = Math.max(18, h - 8);
@@ -2489,23 +2553,42 @@ function caseFrame() {
 }
 function casePages() {
   const meat = MENU.filter(isMeat), veg = MENU.filter(k => !isMeat(k));
-  const all = meat.concat(veg);
+  const shelves = [];
+  const pack = arr => { for (let i = 0; i < arr.length; i += 2) shelves.push(arr.slice(i, i + 2)); };
+  pack(meat); pack(veg);
   const pages = [];
-  for (let i = 0; i < all.length; i += 6) pages.push({ kind: 'mix', keys: all.slice(i, i + 6) });
-  if (!pages.length) pages.push({ kind: 'mix', keys: [] });
+  for (let i = 0; i < shelves.length; i += 3) {
+    const sh = shelves.slice(i, i + 3);
+    const keys = sh.flat();
+    const hasM = keys.some(isMeat), hasV = keys.some(k => !isMeat(k));
+    pages.push({ kind: hasM && hasV ? 'mix' : hasM ? 'meat' : 'veg', keys, shelves: sh });
+  }
+  if (!pages.length) pages.push({ kind: 'veg', keys: [], shelves: [] });
   const page = ((G.casePage || 0) % pages.length + pages.length) % pages.length;
-  return { pages, page, keys: pages[page].keys };
+  return { pages, page, keys: pages[page].keys, shelves: pages[page].shelves };
 }
-function caseCell(i) {
+function cellOnShelf(shelfIndex, col, count) {
   const f = caseFrame();
-  const sh = ART_ANCHORS.case.shelves[Math.floor(i / 2)];
-  const col = i % 2;
+  const sh = ART_ANCHORS.case.shelves[Math.min(2, shelfIndex)];
   const x0 = f.x + f.w * ART_ANCHORS.case.innerX[0];
   const x1 = f.x + f.w * ART_ANCHORS.case.innerX[1];
   const hw = (x1 - x0) / 2;
   const top = f.y + f.h * sh.open0;
   const bot = f.y + f.h * sh.stand;
-  return { x: x0 + col * hw, y: top, w: hw, h: bot - top };
+  const x = count === 1 ? x0 + (x1 - x0 - hw) / 2 : x0 + col * hw;
+  return { x, y: top, w: hw, h: bot - top };
+}
+function caseCell(i) {
+  const shelves = casePages().shelves || [];
+  let n = 0;
+  for (let s = 0; s < shelves.length && s < 3; s++) {
+    const row = shelves[s];
+    for (let c = 0; c < row.length; c++) {
+      if (n === i) return cellOnShelf(s, c, row.length);
+      n++;
+    }
+  }
+  return cellOnShelf(0, 0, 1);
 }
 function caseLayout() {
   const { keys } = casePages();
@@ -2627,7 +2710,7 @@ function drawRail() {
       const tot = sz => ents.reduce((t, e) => t + sz + (e[1] > 1 ? sz * 0.3 : 0) + 4, 0);
       while (s2 > 16 && tot(s2) > w - 52) s2 -= 2;
       const used = Math.min(tot(s2), w - 52);
-      iconRow(ents, x + 8, fy, s2, 4, w - 48);
+      iconRow(ents, x + 8, fy, s2, 4, w - 48, atC && !paying);
     }
     if (!stuck && c.type !== 'regular') { jarIcon('spicy', x + w - 28, fy, 14, c.order.spicy); jarIcon('basil', x + w - 12, fy, 14, c.order.basil); }
     if (atC && !stuck && stockBlocked(c).length) btn('sellShort', x + w - 62, y + h - foodH - 26, 56, 22, L('照賣', 'Serve'), A.sellShort, { color: '#6b4226', size: 14 });
@@ -3078,6 +3161,7 @@ function drawCursor() {
 function drawVol() {
   const S = window.SFX, lv = S ? S.level : 0, lab = !S || S.headless ? L('靜音', 'Mute') : L(['靜音', '小', '中', '大'][lv], ['Mute', 'Low', 'Mid', 'High'][lv]);
   btn('vol', 1200, 6, 74, 32, lab, () => sfx('cycleVolume'), { color: '#3b5b92', size: 13, on: false });
+  btn('fs', 1044, 6, 80, 32, isFullscreen() ? L('視窗', 'Window') : L('全螢幕', 'Full'), toggleFullscreen, { color: '#3b5b92', size: 13 });
   btn('lang', 1130, 6, 64, 32, LANG === 'en' ? 'EN→中' : '中→EN', () => setLang(LANG === 'en' ? 'zh' : 'en'), { color: '#6b4226', size: 13 });
 }
 function render(time) {
