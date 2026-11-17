@@ -175,6 +175,7 @@ const meatCap = () => (typeof has === 'function' && has('bigNet')) ? 6 : MEAT_CA
 ['bigNet','smallNet','fridge','filter','neon','fan','bulk','heatlamp','generator'].forEach(k => loadImg('upg_' + k, `public/assets/upg_${k}.png?v=art3`));
 Object.entries({shaker_salt: 'shaker_salt', shaker_spicy: 'shaker_chili', shaker_basil: 'shaker_basil', steelBowl: 'bowl_steel', glassCase: 'case_glass'}).forEach(([key, file]) => loadImg(key, `public/assets/${file}.png?v=art2`));
 ['btn_wood', 'btn_green', 'btn_red', 'boon_card'].forEach(k => loadImg(k, `public/assets/${k}.png?v=art3`));
+['loud', 'cloth', 'scale', 'iou', 'rush', 'charm', 'saint', 'stash', 'night'].forEach(k => loadImg('boon_' + k, `public/assets/boon_${k}.png?v=art6`));
 ['speaker', 'speakerMute', 'gear', 'sliderTrack', 'sliderKnob', 'checkTag', 'uiStock', 'uiRent', 'season_salt', 'season_spicy', 'season_basil'].forEach(k => {
   const file = { speaker: 'ui_speaker', speakerMute: 'ui_speaker_mute', gear: 'ui_gear', sliderTrack: 'ui_slider_track', sliderKnob: 'ui_slider_knob', checkTag: 'ui_check_tag', uiStock: 'ui_stock', uiRent: 'ui_rent', season_salt: 'season_salt', season_spicy: 'season_chili', season_basil: 'season_basil' }[k];
   loadImg(k, `public/assets/${file}.png?v=art5`);
@@ -3530,6 +3531,7 @@ function drawBoon() {
     const w = 360, h = 420, gap = 24;
     const x = (W - (n * w + (n - 1) * gap)) / 2 + i * (w + gap), y = 120;
     const tone = b.tone === 'good' ? '#2c6b4a' : '#8a5a12';
+    const art = IMG['boon_' + id];
     if (IMG.boon_card) {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(IMG.boon_card, x, y, w, h);
@@ -3541,11 +3543,21 @@ function drawBoon() {
       ctx.fillStyle = tone; rr(x + 18, y + 18, w - 36, 44, 8); ctx.fill();
       text(L(b.tone === 'good' ? '順' : '有代價', b.tone === 'good' ? 'Clean' : 'It costs'), x + 36, y + 40, 14, '#fff8e8', 'left', 'normal');
     }
-    text(L(b.zh, b.en), x + w / 2, y + 118, 26, '#3a2416', 'center');
-    text(L('得到', 'You get'), x + 36, y + 170, 14, '#2c6b4a', 'left', 'normal');
-    wrap(L(b.up, b.upEn), x + 36, y + 200, w - 72, 18, '#2a3a28', 26);
-    text(L('付出', 'You pay'), x + 36, y + 280, 14, '#8a3030', 'left', 'normal');
-    wrap(L(b.down || '沒有', b.downEn || 'Nothing'), x + 36, y + 310, w - 72, 18, '#4a2424', 26);
+    if (art) {
+      const s = 96;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(art, x + (w - s) / 2, y + 34, s, s);
+    }
+    const titleY = art ? y + 148 : y + 118;
+    const getY = art ? y + 176 : y + 170;
+    const upY = art ? y + 198 : y + 200;
+    const payY = art ? y + 252 : y + 280;
+    const downY = art ? y + 274 : y + 310;
+    text(L(b.zh, b.en), x + w / 2, titleY, art ? 22 : 26, '#3a2416', 'center');
+    text(L('得到', 'You get'), x + 36, getY, 14, '#2c6b4a', 'left', 'normal');
+    wrap(L(b.up, b.upEn), x + 36, upY, w - 72, art ? 16 : 18, '#2a3a28', art ? 22 : 26);
+    text(L('付出', 'You pay'), x + 36, payY, 14, '#8a3030', 'left', 'normal');
+    wrap(L(b.down || '沒有', b.downEn || 'Nothing'), x + 36, downY, w - 72, art ? 16 : 18, '#4a2424', art ? 22 : 26);
     btn('boon_' + id, x + 40, y + h - 72, w - 80, 48, L('選這張', 'Take this'), () => A.pickBoon(id), { size: 18, color: tone });
   });
   const owned = (G.boons || []).map(id => { const b = boonBy(id); return b ? L(b.zh, b.en) : id; });
