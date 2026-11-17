@@ -177,6 +177,20 @@ if (typeof WEATHER_EN !== 'undefined') Object.keys(WEATHER_EN).forEach(k => (WEA
 Object.keys(CTYPES).forEach(k => learn(CTYPES[k].label, CTYPES[k].en));
 ['現金不夠', 'Not enough cash', '冰櫃放不下了', 'Fridge is full', '現金不夠換油', 'Cannot afford new oil', '衛生局稽查員', 'Inspector', '攤家', 'House', '當晚', 'Tonight', '隔夜料滿意度 -8', 'Day-old, mood −8', '無', 'none', '開始進貨', 'Buy stock', '重新開始', 'New game', '今晚紀事', "Tonight's log", '今晚淨變化', 'Net tonight', '收攤 → 設備店', 'Close → shop'].forEach((s, i, a) => { if (i % 2 === 0) learn(s, a[i + 1]); });
 function setLine(c, zh, en) { if (!c) return; c.line = zh; c.lineEn = en || ''; }
+function sayGuestLine(c, zh, en) {
+  if (!c) return;
+  if (zh) { c.line = zh; c.lineEn = en || c.lineEn || ''; }
+}
+function tickTalk() {}
+function coachFillKey() {
+  if (!G || drag || G.phase !== 'open' || !G.coach || G.night !== 1 || G.pay) return '';
+  const c = G.counter;
+  if (!c || !c.handed) return '';
+  if ((G.lesson || {}).fill) return '';
+  const ml = fillableLeft(c);
+  return ml.length ? ml[0] : '';
+}
+function blitVfx() { return false; }
 function lineOf(c) { if (!c) return ''; return LANG === 'en' ? (c.lineEn || tr(c.line || '')) : (c.line || ''); }
 function lastText() { const l = G.lastLine; if (!l) return ''; return LANG === 'en' ? (l.textEn || tr(l.text || '')) : (l.textZh || l.text || ''); }
 function pickLine(key, from = 0) {
