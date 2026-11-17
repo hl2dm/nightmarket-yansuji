@@ -340,6 +340,186 @@
       "width": 720,
       "height": 840,
       "transparent": true
+    },
+    {
+      "file": "news_quiet.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_lantern.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_glut.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_spike.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_cram.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_feast.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_raid.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_fight.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_protect.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_oil.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_celeb.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_stockout.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_rival.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_crew.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "news_parade.png",
+      "width": 560,
+      "height": 400,
+      "transparent": false
+    },
+    {
+      "file": "fork_cousin.png",
+      "width": 312,
+      "height": 300,
+      "transparent": true
+    },
+    {
+      "file": "fork_dare.png",
+      "width": 312,
+      "height": 300,
+      "transparent": true
+    },
+    {
+      "file": "fork_match.png",
+      "width": 312,
+      "height": 300,
+      "transparent": true
+    },
+    {
+      "file": "fork_oilvan.png",
+      "width": 312,
+      "height": 300,
+      "transparent": true
+    },
+    {
+      "file": "fork_kid.png",
+      "width": 312,
+      "height": 300,
+      "transparent": true
+    },
+    {
+      "file": "vfx/vfx_drop_burst.png",
+      "width": 2048,
+      "height": 256,
+      "transparent": true,
+      "frames": 8,
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "loop": false
+    },
+    {
+      "file": "vfx/vfx_boil_steady.png",
+      "width": 1536,
+      "height": 256,
+      "transparent": true,
+      "frames": 6,
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "loop": true
+    },
+    {
+      "file": "vfx/vfx_boil_fine.png",
+      "width": 1536,
+      "height": 256,
+      "transparent": true,
+      "frames": 6,
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "loop": true
+    },
+    {
+      "file": "vfx/vfx_ready_glint.png",
+      "width": 1536,
+      "height": 256,
+      "transparent": true,
+      "frames": 6,
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "loop": false
+    },
+    {
+      "file": "vfx/vfx_smoke_wisp.png",
+      "width": 512,
+      "height": 160,
+      "transparent": true,
+      "frames": 4,
+      "frameWidth": 128,
+      "frameHeight": 160,
+      "loop": true
+    },
+    {
+      "file": "vfx/vfx_smoke_burnt.png",
+      "width": 2048,
+      "height": 256,
+      "transparent": true,
+      "frames": 8,
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "loop": true
     }
   ],
   "font": {

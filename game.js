@@ -134,16 +134,17 @@ loadImg('burnt', 'assets/food_burnt.png'); loadImg('bigNet', 'public/assets/bask
 loadImg('tank2', 'assets/fryer_tank.png'); loadImg('uiCash', 'assets/ui_cash.png'); loadImg('uiRep', 'assets/ui_rep.png');
 loadImg('bowl_salt', 'assets/bowl_pepper.png'); loadImg('bowl_spicy', 'assets/bowl_chili.png'); loadImg('bowl_basil', 'assets/food_basil_fried.png'); loadImg('scissorsP', 'assets/scissors.png'); loadImg('bagP', 'assets/food_bag.png'); loadImg('cashTray', 'assets/cash_tray.png');
 ['stall_front','bg_mid','shop_upgrade','night_summary','bg_rain','bg_temple','bg_ghost','bg_blackout','bg_far'].forEach(k => loadImg('sc_' + k, `assets/scene_${k}.jpg`));
-['quiet','lantern','glut','spike','cram','feast','raid','fight','protect','oil','celeb','stockout','rival','crew','parade'].forEach(k => loadImg('news_' + k, `assets/news_${k}.jpg`));
+['quiet','lantern','glut','spike','cram','feast','raid','fight','protect','oil','celeb','stockout','rival','crew','parade'].forEach(k => loadImg('news_' + k, `public/assets/news_${k}.png?v=art4`));
+['cousin','dare','match','oilvan','kid'].forEach(k => loadImg('fork_' + k, `public/assets/fork_${k}.png?v=art4`));
 loadImg('hand', 'assets/hand_boss.png');
 loadImg('cat', 'assets/cat_market.png');
 // 熟度序列圖（橫條）。沒有檔就維持程式畫的泡，檔案到了自動換上。
-loadImg('vfx_burst', 'assets/vfx/vfx_drop_burst.png');
-loadImg('vfx_roll', 'assets/vfx/vfx_boil_steady.png');
-loadImg('vfx_fine', 'assets/vfx/vfx_boil_fine.png');
-loadImg('vfx_burn', 'assets/vfx/vfx_smoke_burnt.png');
-loadImg('vfx_flash', 'assets/vfx/vfx_ready_glint.png');
-loadImg('vfx_smoke', 'assets/vfx/vfx_smoke_wisp.png');
+loadImg('vfx_burst', 'public/assets/vfx/vfx_drop_burst.png');
+loadImg('vfx_roll', 'public/assets/vfx/vfx_boil_steady.png');
+loadImg('vfx_fine', 'public/assets/vfx/vfx_boil_fine.png');
+loadImg('vfx_burn', 'public/assets/vfx/vfx_smoke_burnt.png');
+loadImg('vfx_flash', 'public/assets/vfx/vfx_ready_glint.png');
+loadImg('vfx_smoke', 'public/assets/vfx/vfx_smoke_wisp.png');
 const meatCap = () => (typeof has === 'function' && has('bigNet')) ? 6 : MEAT_CAP;
 ['bigNet','smallNet','fridge','filter','neon','fan','bulk','heatlamp','generator'].forEach(k => loadImg('upg_' + k, `public/assets/upg_${k}.png?v=art3`));
 Object.entries({shaker_salt: 'shaker_salt', shaker_spicy: 'shaker_chili', shaker_basil: 'shaker_basil', steelBowl: 'bowl_steel', glassCase: 'case_glass'}).forEach(([key, file]) => loadImg(key, `public/assets/${file}.png?v=art2`));
@@ -204,7 +205,27 @@ function planCoach() {
   if (!Lsn.bag && G.plate.length) coachAim = { type: 'plate', cid: c.id };
 }
 function coachFillKey() { return coachAim && coachAim.type === 'food' ? coachAim.key : ''; }
-function blitVfx() { return false; }
+const VFX_STRIPS = {
+  burst: { frames: 8, width: 256, height: 256, duration: 1.2 },
+  roll: { frames: 6, width: 256, height: 256, fps: 10 },
+  fine: { frames: 6, width: 256, height: 256, fps: 12 },
+  flash: { frames: 6, width: 256, height: 256, duration: 0.35 },
+  smoke: { frames: 4, width: 128, height: 160, fps: 6 },
+  burn: { frames: 8, width: 256, height: 256, fps: 8 }
+};
+function blitVfx(key, x, y, w, h, now, age) {
+  const im = IMG['vfx_' + key], strip = VFX_STRIPS[key];
+  if (!im || !strip || im.width !== strip.width * strip.frames || im.height !== strip.height) return false;
+  const t = Math.max(0, Number.isFinite(age) ? age : now);
+  const frame = strip.duration
+    ? Math.min(strip.frames - 1, Math.floor(t / strip.duration * strip.frames))
+    : Math.floor(t * strip.fps) % strip.frames;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(im, frame * strip.width, 0, strip.width, strip.height, x, y, w, h);
+  ctx.restore();
+  return true;
+}
 function wrapBubble(txt) {
   const chars = [...String(txt || '')];
   if (!chars.length) return [];
@@ -2561,7 +2582,7 @@ function drawSlot(i, net, now, cid) {
     else { ctx.fillStyle = I.color; ctx.beginPath(); ctx.arc(cx, cy, s / 3, 0, 7); ctx.fill(); }
   });
   drawFryLife(x, y, w, h, net, now, b);
-  if (b.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.55, b.flash * 1.6); ctx.fillStyle = '#fff2b0'; rr(x, y, w, h, 10); ctx.fill(); ctx.restore(); }
+  if (b.flash > 0 && !IMG.vfx_flash) { ctx.save(); ctx.globalAlpha = Math.min(0.55, b.flash * 1.6); ctx.fillStyle = '#fff2b0'; rr(x, y, w, h, 10); ctx.fill(); ctx.restore(); }
   const who = railCustomers().findIndex(cu => net[0] && cu.id === net[0].cid);
   if (who >= 0) { ctx.fillStyle = ['#c8962e', '#1d7a6e', '#6d4ea0'][who]; rr(x + 6, y + 6, 18, 16, 4); ctx.fill(); text(String(who + 1), x + 15, y + 14, 12, '#fff', 'center'); }
   const ready = P >= SH_LO && P < 100 && P <= SH_HI + 8, burnt = P >= 100;
@@ -3008,7 +3029,7 @@ function drawNewsCard(time) {
   const im = IMG['news_' + nt.id] || IMG.cat || IMG.hand;
   if (im) {
     const ix = x + 28, iy = y + 68, iw = 280, ih = 200;
-    ctx.save(); rr(ix, iy, iw, ih, 8); ctx.clip();
+    ctx.save(); ctx.imageSmoothingEnabled = false; rr(ix, iy, iw, ih, 8); ctx.clip();
     ctx.drawImage(im, ix, iy, iw, ih);
     ctx.restore();
   }
@@ -3208,18 +3229,18 @@ function drawFork() {
   const x = 280, y = 180, w = 720, h = 320;
   wood(x, y, w, h);
   text(L(f.zh, f.en), x + 200, y + 42, 26, '#ffcf6b');
-  const forkArt = f.id === 'cousin' ? (foodImg(thinnest() || 'chicken', false) || IMG.c_student)
+  const forkArt = IMG['fork_' + f.id] || (f.id === 'cousin' ? (foodImg(thinnest() || 'chicken', false) || IMG.c_student)
     : f.id === 'dare' ? IMG.c_drunk
     : f.id === 'oilvan' ? (IMG.fryerBody || IMG.uiCash)
     : f.id === 'kid' ? (foodImg('sweetpotato', false) || IMG.c_aunt)
-    : (IMG.uiCash || IMG.c_aunt);
+    : (IMG.uiCash || IMG.c_aunt));
   if (forkArt) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = 'rgba(0,0,0,0.28)'; rr(x + 28, y + 72, 156, 150, 8); ctx.fill();
-    const sc = Math.min(140 / forkArt.width, 134 / forkArt.height);
+    const sc = Math.min(156 / forkArt.width, 150 / forkArt.height);
     const dw = forkArt.width * sc, dh = forkArt.height * sc;
-    ctx.drawImage(forkArt, x + 28 + (156 - dw) / 2, y + 78 + (138 - dh) / 2, dw, dh);
+    ctx.drawImage(forkArt, x + 28 + (156 - dw) / 2, y + 72 + (150 - dh) / 2, dw, dh);
     ctx.restore();
   }
   wrap(L(f.line, f.lineEn), x + 200, y + 86, w - 236, 16, '#f3e6d0', 26);

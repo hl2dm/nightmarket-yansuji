@@ -1,0 +1,71 @@
+{
+  "common": "Low saturation hand-painted pixel art, visible square pixel clusters, warm amber/cream highlights and deep teal shadows, muted rust. No text, numbers, logos, watermark or real-person likeness.",
+  "news": {
+    "quiet": "A newspaper with blank advertisement panels spread on a wooden counter, quiet empty Taiwanese market alley behind it. No print or writing.",
+    "lantern": "Red lanterns strung across a Taiwanese night market street, people walking toward a fried-food stall.",
+    "glut": "Dawn wholesale vegetable market with plentiful crates of vegetables and completely blank price signs.",
+    "spike": "Butcher wiping a price blackboard completely blank, chicken cages beside the meat stall.",
+    "cram": "Students with backpacks streaming out of a Taiwanese cram-school entrance; blank signboards.",
+    "feast": "Closed takeaway bento boxes stacked outside a restaurant back door.",
+    "raid": "A blank red paper announcement nailed to an electricity pole beside a night-market alley.",
+    "fight": "Two market stall owners shouting at each other from opposite sides of a street, customers walking around them; no weapons.",
+    "protect": "Man in black slapping a wooden stall counter, shopkeeper standing behind it. No weapons.",
+    "oil": "Metal oil drums at entrance of a cooking-oil shop, completely blank blackboard.",
+    "celeb": "Crowd in an alley holding up smartphones toward a person in leather jacket seen ONLY from behind, anonymous fictional person.",
+    "stockout": "Empty wooden supply crate with lid open on a stall counter, alley behind.",
+    "rival": "Long customer queue at stall across the street; near-side stall has few customers.",
+    "crew": "Film lighting equipment and a completely blank clapperboard lighting a Taiwanese night-market street.",
+    "parade": "Taiwanese temple palanquin and drummers passing in front of a night-market stall."
+  },
+  "forks": {
+    "cousin": "Young Taiwanese male cousin carrying a box of raw meat on his shoulder, waist-up, lit by warm market lighting.",
+    "dare": "Tipsy adult male customer slapping a small wooden tabletop with one open palm. An empty paper bag stands on the table.",
+    "match": "Blank price menu board beside three people queuing at a rival market stall. Small compact isolated vignette.",
+    "oilvan": "Small pickup truck rear bed carrying one large cooking-oil drum, driver visible waist-up beside it. Compact vignette.",
+    "kid": "Young child tugging grandmother's sleeve, grandmother holding a woven vegetable shopping basket. Both clearly visible."
+  },
+  "vfx": [
+    [
+      "drop_burst",
+      8,
+      4,
+      2,
+      "A ring of large cream-white and amber oil bubbles erupting strongly in first frame, expanding then settling down through the sequence. Entire central 40% stays fully transparent in every frame. One-shot splash."
+    ],
+    [
+      "boil_steady",
+      6,
+      3,
+      2,
+      "A hollow ring of medium cream-white and amber bubbles, gentle changing positions and sizes around perimeter, seamlessly looping. Entire central40% stays transparent."
+    ],
+    [
+      "boil_fine",
+      6,
+      3,
+      2,
+      "A delicate hollow ring of many tiny cream-white and amber bubbles, subtly varying for seamless loop. Entire central40% stays transparent."
+    ],
+    [
+      "ready_glint",
+      6,
+      3,
+      2,
+      "A sparse ring of golden pixel sparkles: appear, brighten, peak, diminish, nearly disappear. One-shot ready effect. Center fully empty transparent."
+    ],
+    [
+      "smoke_wisp",
+      4,
+      4,
+      1,
+      "One faint gray smoke wisp, softly curling and drifting upward across frames, seamless looping, transparent all around. No bubbles."
+    ],
+    [
+      "smoke_burnt",
+      8,
+      4,
+      2,
+      "Dark charcoal smoke puffs curling upward in subtly different poses, seamlessly looping. Irregular smoke silhouette with alpha edges. No flames."
+    ]
+  ]
+}
